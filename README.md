@@ -2,8 +2,8 @@
 
 ##Stuff about `srx2text` and `query-sparql`
 
-`srx2text` is a tiny Perl script that parses an `srx` file and formats the
-it as a table.
+`srx2text` is a tiny Perl script that parses an `srx` file and formats it as a
+table.
 
 Comes with a handy utility: `query-sparql`, a Bash script that runs a query on
 a remote SPARQL endpoint from a file. So that you can use your favorite editor
@@ -61,7 +61,6 @@ The file `test.srx` contains the previous dump, and look:
     │ <http://dbpedia.org/resource/%C3%81lvaro_de_Castro>                           │ a  │ owl:Thing │
     │ <http://dbpedia.org/resource/%C3%81ngel_Berlanga>                             │ a  │ owl:Thing │
     └───────────────────────────────────────────────────────────────────────────────┴────┴───────────┘
-    
     10 results
     $ ./query-sparql test.sparql | ./srx2text
     ┌───────────────────────────────────────────────────────────────────────────────┬────┬───────────┐
@@ -78,7 +77,6 @@ The file `test.srx` contains the previous dump, and look:
     │ <http://dbpedia.org/resource/%C3%81lvaro_de_Castro>                           │ a  │ owl:Thing │
     │ <http://dbpedia.org/resource/%C3%81ngel_Berlanga>                             │ a  │ owl:Thing │
     └───────────────────────────────────────────────────────────────────────────────┴────┴───────────┘
-    
     10 results
 
 Make sure you read the help files to learn about the options:

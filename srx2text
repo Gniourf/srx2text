@@ -51,7 +51,7 @@ GetOptions(
 
 pod2usage(-exit => 0, -verbose => 2, -noperldoc => 1) if $help;
 if($version) {
-   print "srx2text 0.1.4\n";
+   print "srx2text 0.1.5\n";
    exit(0);
 }
 
@@ -187,12 +187,18 @@ if($imposed_width) {
 
 sub get_good_bad {
    use integer;
+   print join(', ',@_)."\n";
    my ($w,$a,$good_pary,$bad_pary,$n_pary)=@_;
    my @new_good=grep { $n_pary->[$_]<=$a } @{$bad_pary};
    my @new_bad=grep { $n_pary->[$_]>$a } @{$bad_pary};
+   print "new_good: ".join(', ',@new_good)."\n";
+   print "new_bad: ".join(', ',@new_bad)."\n";
    my @r=@{$n_pary};
    for my $i (@new_good) { $r[$i]=$n_pary->[$i]; }
-   if(@new_bad==0 || @new_bad==@{$bad_pary}) {
+   if(@new_bad==0) {
+      return \@r;
+   }
+   elsif(@new_bad==@{$bad_pary}) {
       my $wbad=0;
       map { $wbad+=$n_pary->[$_] } @new_bad;
       die "Can't fit table" unless($wbad);
@@ -206,6 +212,7 @@ sub get_good_bad {
       map { $width_new_good += $n_pary->[$_] } @new_good;
       my $new_w=$w-$width_new_good;
       my $new_a=$new_w/@new_bad;
+      print "new_w=$new_w, new_a=$new_a\n";
       return get_good_bad($new_w,$new_a,\@new_good,\@new_bad,\@r);
    }
 }
@@ -242,9 +249,11 @@ my @colwidth_wrapped;
    use integer;
    if($wanted_max_width && $table_natural_width>$wanted_max_width) {
       # Truncate large columns to something reasonable
-      my @colwidth_trunc=map { min2($_,$wanted_max_width/2) } @colwidth;
+      my @colwidth_trunc=map { min2($_,$wanted_max_width) } @colwidth;
+      print join(', ',@colwidth_trunc)."\n";
       #
       my $w=$wanted_max_width-(2+3*($nbcols-1)+2);
+      print "av=".$w/$nbcols."\n";
       @colwidth_wrapped=@{get_good_bad($w,$w/$nbcols,[],[0..($nbcols-1)],\@colwidth_trunc)};
    }
    else {
@@ -324,7 +333,7 @@ A very permissive one!
 
 =head1 VERSION
 
-0.1.4
+0.1.5
 
 =head1 AUTHOR
 
