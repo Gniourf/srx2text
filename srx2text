@@ -19,7 +19,6 @@ use Term::ReadKey;
 use Encode;
 
 use Data::Dumper;
-#
 
 #
 my %prefixes=(
@@ -46,20 +45,20 @@ my $imposed_width;
 GetOptions(
    'help|h|?' => \$help,
    'version|v' => \$version,
-   'fit-to-terminal!' => \$fitterminal, # Used if you pipe the output, then $is_in_terminal will be false, yet you'll probably want to fit to terminal's width
+   'fit-to-terminal!' => \$fitterminal,
    'width|w=i' => \$imposed_width,
 ) or pod2usage(1);
 
 pod2usage(-exit => 0, -verbose => 2, -noperldoc => 1) if $help;
 if($version) {
-   print "srx2text 0.1.3\n";
+   print "srx2text 0.1.4\n";
    exit(0);
 }
 
 my $fh;
 if(@ARGV) {
    my $file=shift;
-   open($fh ,'<', $file); #$file || die "can't open file or standard input for reading: $!";
+   open($fh ,'<', $file) || die "can't open file or standard input for reading: $!";
 }
 else {
    $fh=\*STDIN;
@@ -70,14 +69,15 @@ binmode $fh;
 sub format_uri {
    my $uri=shift;
    my $found;
+   keys %prefixes; # Explicitely reset the each iterator
    while(my ($prefix,$prefix_uri)=each %prefixes) {
       if(index($uri,$prefix_uri)==0) {
          $uri=$prefix.":".(substr $uri,(length $prefix_uri));
-         $uri="a" if($uri eq "rdf:type");
          $found=1;
+         last;
       }
    }
-   $uri="<".$uri.">" unless($found);
+   if($found) { $uri="a" if($uri eq "rdf:type"); } else { $uri="<".$uri.">"; }
    return $uri;
 }
 
@@ -86,11 +86,11 @@ my $doc=XML::LibXML->load_xml(IO=>$fh);
 my $sparql_node=$doc->firstChild;
 die "First node isn't sparql" unless $sparql_node->nodeName eq "sparql";
 
-my @sparql_children=$sparql_node->nonBlankChildNodes;
-my $head_node=$sparql_children[0];
+my $sparql_children=\@{$sparql_node->nonBlankChildNodes};
+my $head_node=$sparql_children->[0];
 die "head node not found in first position" unless $head_node->nodeName eq "head";
 #
-my $results_node=$sparql_children[1];
+my $results_node=$sparql_children->[1];
 my @results_children=$results_node->nonBlankChildNodes;
 my $result_type=$results_node->nodeName;
 
@@ -98,8 +98,7 @@ my @variables;
 my @rows;
 if($result_type eq "results") {
    # Get variable nodes inside head
-   my @head_children=@{$head_node->nonBlankChildNodes};
-   for my $v (@head_children) {
+   for my $v ($head_node->nonBlankChildNodes) {
       die "In head: not a variable node" unless $v->nodeName eq "variable";
       die "In head: variable node has no name attribute" unless $v->hasAttribute("name");
       push(@variables,$v->getAttribute("name"));
@@ -112,9 +111,9 @@ if($result_type eq "results") {
          die "In result: not a binding node" unless $b->nodeName eq "binding";
          die "In result: binding node doesn't have a name attribute" unless $b->hasAttribute("name");
          my $variable=$b->getAttribute("name");
-         my @b_children=$b->nonBlankChildNodes;
-         die "binding node has ".@b_children." children! (should only have 1)" unless @b_children==1;
-         my $uri=$b_children[0];
+         my $b_children=\@{$b->nonBlankChildNodes};
+         die "binding node has ".@{$b_children}." children! (should only have 1)" unless @${b_children}==1;
+         my $uri=$b_children->[0];
          my $value;
          given($uri->nodeName) {
             when (/^uri$/) { $value=format_uri($uri->textContent); }
@@ -140,7 +139,7 @@ elsif($result_type eq "boolean") {
    exit(0);
 }
 else {
-   die "results node not found in second position (found $result_type node)";
+   die "Not a valid node: $result_type at this position";
 }
 
 #################
@@ -271,7 +270,7 @@ print $hor_rule_middle."\n";
 map { format_row($format,\@colwidth_wrapped,$_) } @rows;
 print $hor_rule_lower."\n";
 # Total:
-print "\n".@rows." results\n";
+print @rows." results\n";
 
 # vim: set filetype=perl :
 
@@ -325,7 +324,7 @@ A very permissive one!
 
 =head1 VERSION
 
-0.1.3
+0.1.4
 
 =head1 AUTHOR
 
