@@ -1,0 +1,198 @@
+#!/usr/bin/perl
+
+# This script converts an srx (sparql-results+xml) file into a (text) table
+
+use strict;
+use warnings;
+
+use XML::LibXML;
+
+use Pod::Usage;
+use Getopt::Long;
+
+use utf8;
+
+use feature qw/switch/;
+
+use Data::Dumper;
+#
+
+#
+my %prefixes=(
+   dc => "http://purl.org/dc/elements/1.1/",
+   dcterms => "http://purl.org/dc/terms/",
+   eor => "http://dublincore.org/2000/03/13/eor#",
+   foaf => "http://xmlns.com/foaf/0.1/",
+   lib => "http://www.swi-prolog.org/rdf/library/",
+   owl => "http://www.w3.org/2002/07/owl#",
+   rdf => "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+   rdfs => "http://www.w3.org/2000/01/rdf-schema#",
+   serql => "http://www.openrdf.org/schema/serql#",
+   skos => "http://www.w3.org/2004/02/skos/core#",
+   vann => "http://purl.org/vocab/vann/",
+   void => "http://rdfs.org/ns/void#",
+   xsd => "http://www.w3.org/2001/XMLSchema#",
+);
+sub format_uri {
+   my $uri=shift;
+   my $r;
+   while(my ($prefix,$prefix_uri)=each(%prefixes)) {
+      $uri=$prefix.":".(substr $uri,(length $prefix_uri)) if (index $uri,$prefix_uri)==0 ;
+   }
+   $uri="a" if $uri eq "rdf:type";
+   return $uri;
+}
+
+#
+
+my $help=0;
+GetOptions(
+   'help|h|?' => \$help,
+) or pod2usage(1);
+
+if($help) {
+   pod2usage(-exit => 0, -verbose => 2, -noperldoc => 1);
+   exit(0);
+}
+
+my $fh;
+if(@ARGV) {
+   my $file=shift;
+   open($fh ,'<', $file); #$file || die "can't open file or standard input for reading: $!";
+}
+else {
+   $fh=\*STDIN;
+}
+binmode $fh;
+
+#
+
+my $doc=XML::LibXML->load_xml(IO=>$fh);
+
+my $sparql_node=$doc->firstChild;
+die "First node isn't sparql" unless $sparql_node->nodeName eq "sparql";
+
+my @sparql_children=$sparql_node->nonBlankChildNodes;
+my $head_node=$sparql_children[0];
+my $results_node=$sparql_children[1];
+die "head node not found in first position" unless $head_node->nodeName eq "head";
+die "results node not found in second position" unless $results_node->nodeName eq "results";
+# Get variable nodes inside head
+my @head_children=$head_node->nonBlankChildNodes;
+my @variables=();
+for my $v (@head_children) {
+   die "In head: not a variable node" unless $v->nodeName eq "variable";
+   die "variable node has no name attribute" unless $v->hasAttribute("name");
+   push(@variables,$v->getAttribute("name"));
+}
+
+# Get result node inside results
+my @results_children=$results_node->nonBlankChildNodes;
+my @rows;
+my $nbcols;
+for my $r (@results_children) {
+   die "In results: not a result node" unless $r->nodeName eq "result";
+   my @row;
+   my @r_children=$r->nonBlankChildNodes;
+   my $nbcols_tmp=0;
+   for my $b (@r_children) {
+      ++$nbcols_tmp;
+      die "In result: not a binding node" unless $b->nodeName eq "binding";
+      my @b_children=$b->nonBlankChildNodes;
+      die "binding node has ".@b_children." children! (should only have 1)" unless @b_children==1;
+      my $uri=$b_children[0];
+      given($uri->nodeName) {
+         when (/^uri$/) {
+            push(@row,format_uri($uri->textContent));
+         }
+         when (/^literal$/) {
+            push(@row,$uri->textContent);
+         }
+         default {
+            die "In binding: expecting uri or literal node. Found ".$uri->nodeName."\." unless $uri->nodeName eq "uri";
+         }
+      }
+   }
+   $nbcols=$nbcols_tmp unless defined $nbcols;
+   die "irregular number of columns" unless $nbcols==$nbcols_tmp;
+   die "can't have 0 columns" unless $nbcols;
+   push(@rows,\@row);
+}
+
+if (@rows==0) {
+   print "No results\n";
+   exit;
+}
+
+#################
+# Format output #
+#################
+
+# Get max length of each column
+my @colwidth=map { 1+length; } @variables;
+for my $r (@rows) {
+   for(my $i=0;$i<@{$r};++$i) {
+      my $l=length($r->[$i]);
+      $colwidth[$i]=$l if $colwidth[$i]<$l;
+   }
+}
+
+my $totalwidth=0;
+map { $totalwidth += $_ } @colwidth;
+
+# Upper part of table
+my $hor_rule="-"x($totalwidth+2+3*($nbcols-1)+2);
+
+print $hor_rule."\n";
+
+my $format="| ".join(' | ',map { "%-".$_."s" } @colwidth)." |";
+
+# Head of table
+printf "$format\n",(map { "?".$_ } @variables);
+print $hor_rule."\n";
+
+for my $r (@rows) {
+   printf "$format\n",@{$r};
+}
+print $hor_rule."\n";
+
+print "\n".@rows." results\n";
+
+# vim: set filetype=perl :
+
+__END__
+
+=pod
+
+=encoding utf-8
+
+=head1 NAME
+
+srx2text
+
+=head1 USAGE
+
+srx2text [FILENAME]
+
+=head1 SYNOPSIS
+
+Reads FILENAME or standard input, that must be a well-formed srx file
+(sparql-results+xml), see L<http://www.w3.org/TR/rdf-sparql-query/>,
+and outputs a table in text format.
+
+The common prefixes are used.
+
+=head1 LICENSE
+
+A very permissive one!
+
+=head1 VERSION
+
+0.1
+
+=head1 AUTHOR
+
+Gniourf - L<gniourfgniourf@gmail.com>
+
+=cut
+
