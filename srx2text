@@ -52,7 +52,7 @@ GetOptions(
 
 pod2usage(-exit => 0, -verbose => 2, -noperldoc => 1) if $help;
 if($version) {
-   print "srx2text 0.1.2\n";
+   print "srx2text 0.1.3\n";
    exit(0);
 }
 
@@ -88,45 +88,59 @@ die "First node isn't sparql" unless $sparql_node->nodeName eq "sparql";
 
 my @sparql_children=$sparql_node->nonBlankChildNodes;
 my $head_node=$sparql_children[0];
-my $results_node=$sparql_children[1];
 die "head node not found in first position" unless $head_node->nodeName eq "head";
-die "results node not found in second position" unless $results_node->nodeName eq "results";
-# Get variable nodes inside head
-my @variables=();
-for my $v ($head_node->nonBlankChildNodes) {
-   die "In head: not a variable node" unless $v->nodeName eq "variable";
-   die "In head: variable node has no name attribute" unless $v->hasAttribute("name");
-   push(@variables,$v->getAttribute("name"));
-}
+#
+my $results_node=$sparql_children[1];
+my @results_children=$results_node->nonBlankChildNodes;
+my $result_type=$results_node->nodeName;
 
-# Get result node inside results
+my @variables;
 my @rows;
-for my $r ($results_node->nonBlankChildNodes) {
-   die "In results: not a result node" unless $r->nodeName eq "result";
-   my %hrow;
-   for my $b ($r->nonBlankChildNodes) {
-      die "In result: not a binding node" unless $b->nodeName eq "binding";
-      die "In result: binding node doesn't have a name attribute" unless $b->hasAttribute("name");
-      my $variable=$b->getAttribute("name");
-      my @b_children=$b->nonBlankChildNodes;
-      die "binding node has ".@b_children." children! (should only have 1)" unless @b_children==1;
-      my $uri=$b_children[0];
-      my $value;
-      given($uri->nodeName) {
-         when (/^uri$/) { $value=format_uri($uri->textContent); }
-         when (/^literal$/) { $value=$uri->textContent; }
-         default { die "In binding: expecting uri or literal node. Found ".$uri->nodeName."\." unless $uri->nodeName eq "uri"; }
+if($result_type eq "results") {
+   # Get variable nodes inside head
+   my @head_children=@{$head_node->nonBlankChildNodes};
+   for my $v (@head_children) {
+      die "In head: not a variable node" unless $v->nodeName eq "variable";
+      die "In head: variable node has no name attribute" unless $v->hasAttribute("name");
+      push(@variables,$v->getAttribute("name"));
+   }
+   # Get result node inside results
+   for my $r (@results_children) {
+      die "In results: not a result node" unless $r->nodeName eq "result";
+      my %hrow;
+      for my $b ($r->nonBlankChildNodes) {
+         die "In result: not a binding node" unless $b->nodeName eq "binding";
+         die "In result: binding node doesn't have a name attribute" unless $b->hasAttribute("name");
+         my $variable=$b->getAttribute("name");
+         my @b_children=$b->nonBlankChildNodes;
+         die "binding node has ".@b_children." children! (should only have 1)" unless @b_children==1;
+         my $uri=$b_children[0];
+         my $value;
+         given($uri->nodeName) {
+            when (/^uri$/) { $value=format_uri($uri->textContent); }
+            when (/^literal$/) { $value=$uri->textContent; }
+            default { die "In binding: expecting uri or literal node. Found ".$uri->nodeName."\." unless $uri->nodeName eq "uri"; }
+         }
+         $hrow{$variable}=$value;
       }
-      $hrow{$variable}=$value;
+      my @row;
+      for my $var (@variables) {
+         my $topush;
+         if(defined $hrow{$var}) { $topush=$hrow{$var}; }
+         else { $topush=''; }
+         push(@row,$topush);
+      }
+      push(@rows,\@row);
    }
-   my @row;
-   for my $var (@variables) {
-      my $topush;
-      if(defined $hrow{$var}) { $topush=$hrow{$var}; }
-      else { $topush=''; }
-      push(@row,$topush);
-   }
-   push(@rows,\@row);
+}
+elsif($result_type eq "boolean") {
+   my $banswer=$results_children[0]->textContent;
+   die "Bad boolean: $banswer" unless grep { $_ eq $banswer } ( "true", "false" );
+   print $banswer."\n";
+   exit(0);
+}
+else {
+   die "results node not found in second position (found $result_type node)";
 }
 
 #################
@@ -311,7 +325,7 @@ A very permissive one!
 
 =head1 VERSION
 
-0.1.2
+0.1.3
 
 =head1 AUTHOR
 
