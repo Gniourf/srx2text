@@ -10,9 +10,32 @@ a remote SPARQL endpoint from a file. So that you can use your favorite editor
 (vim, emacs, whatever) to edit SPARQL queries, query the remote endpoint and
 have a nicely formatted table.
 
-There are two example files: `test.srx` which was obtained from the query
-`SELECT ?s ?p ?o WHERE { ?s ?p ?o } LIMIT 10` on `dbpedia.org` and `test.sparql`
-containing this query.
+There are two example files: the file `test.srx` which was obtained from the
+query
+
+    SELECT ?s ?p ?o
+    WHERE {
+        GRAPH <http://dbpedia.org> {
+            ?s ?p ?o
+        }
+    }
+    LIMIT 10
+on `dbpedia.org` and the file `test.sparql` containing this query:
+
+    #!/usr/local/bin/query-sparql
+    
+    ###-h dbpedia.org
+    ###-p 80
+    
+    SELECT ?s ?p ?o
+    WHERE {
+       GRAPH <http://dbpedia.org> {
+          ?s ?p ?o
+       }
+    }
+    LIMIT 10
+    
+    # vim: set filetype=sparql :
 
 Play with it:
 
