@@ -2,17 +2,21 @@
 
 # This script converts an srx (sparql-results+xml) file into a (text) table
 
+use v5.014;
+use utf8;
 use strict;
-use warnings;
+use autodie;
+use warnings qw< FATAL utf8 >;
+use open qw< :std :utf8 >;
+use charnames qw< :full >;
+use feature qw< unicode_strings >;
 
 use XML::LibXML;
 
 use Pod::Usage;
 use Getopt::Long;
-
-use utf8;
-
-use feature qw/switch/;
+use Term::ReadKey;
+use Encode;
 
 use Data::Dumper;
 #
@@ -23,7 +27,6 @@ my %prefixes=(
    dcterms => "http://purl.org/dc/terms/",
    eor => "http://dublincore.org/2000/03/13/eor#",
    foaf => "http://xmlns.com/foaf/0.1/",
-   lib => "http://www.swi-prolog.org/rdf/library/",
    owl => "http://www.w3.org/2002/07/owl#",
    rdf => "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
    rdfs => "http://www.w3.org/2000/01/rdf-schema#",
@@ -33,25 +36,23 @@ my %prefixes=(
    void => "http://rdfs.org/ns/void#",
    xsd => "http://www.w3.org/2001/XMLSchema#",
 );
-sub format_uri {
-   my $uri=shift;
-   my $r;
-   while(my ($prefix,$prefix_uri)=each(%prefixes)) {
-      $uri=$prefix.":".(substr $uri,(length $prefix_uri)) if (index $uri,$prefix_uri)==0 ;
-   }
-   $uri="a" if $uri eq "rdf:type";
-   return $uri;
-}
-
 #
 
+my $is_in_terminal=(-t STDOUT);
 my $help=0;
+my $version=0;
+my $fitterminal=$is_in_terminal;
+my $imposed_width;
 GetOptions(
    'help|h|?' => \$help,
+   'version|v' => \$version,
+   'fit-to-terminal!' => \$fitterminal, # Used if you pipe the output, then $is_in_terminal will be false, yet you'll probably want to fit to terminal's width
+   'width|w=i' => \$imposed_width,
 ) or pod2usage(1);
 
-if($help) {
-   pod2usage(-exit => 0, -verbose => 2, -noperldoc => 1);
+pod2usage(-exit => 0, -verbose => 2, -noperldoc => 1) if $help;
+if($version) {
+   print "srx2text 0.1.1\n";
    exit(0);
 }
 
@@ -66,6 +67,19 @@ else {
 binmode $fh;
 
 #
+sub format_uri {
+   my $uri=shift;
+   my $found;
+   while(my ($prefix,$prefix_uri)=each %prefixes) {
+      if(index($uri,$prefix_uri)==0) {
+         $uri=$prefix.":".(substr $uri,(length $prefix_uri));
+         $uri="a" if($uri eq "rdf:type");
+         $found=1;
+      }
+   }
+   $uri="<".$uri.">" unless($found);
+   return $uri;
+}
 
 my $doc=XML::LibXML->load_xml(IO=>$fh);
 
@@ -102,15 +116,9 @@ for my $r (@results_children) {
       die "binding node has ".@b_children." children! (should only have 1)" unless @b_children==1;
       my $uri=$b_children[0];
       given($uri->nodeName) {
-         when (/^uri$/) {
-            push(@row,format_uri($uri->textContent));
-         }
-         when (/^literal$/) {
-            push(@row,$uri->textContent);
-         }
-         default {
-            die "In binding: expecting uri or literal node. Found ".$uri->nodeName."\." unless $uri->nodeName eq "uri";
-         }
+         when (/^uri$/) { push(@row,format_uri($uri->textContent)); }
+         when (/^literal$/) { push(@row,$uri->textContent); }
+         default { die "In binding: expecting uri or literal node. Found ".$uri->nodeName."\." unless $uri->nodeName eq "uri"; }
       }
    }
    $nbcols=$nbcols_tmp unless defined $nbcols;
@@ -119,9 +127,13 @@ for my $r (@results_children) {
    push(@rows,\@row);
 }
 
+#################
+# Print results #
+#################
+
 if (@rows==0) {
    print "No results\n";
-   exit;
+   exit(0);
 }
 
 #################
@@ -137,25 +149,111 @@ for my $r (@rows) {
    }
 }
 
+# Get the total (natural) width of the table:
 my $totalwidth=0;
 map { $totalwidth += $_ } @colwidth;
+my $table_natural_width=$totalwidth+2+3*($nbcols-1)+2;
 
-# Upper part of table
-my $hor_rule="-"x($totalwidth+2+3*($nbcols-1)+2);
-
-print $hor_rule."\n";
-
-my $format="| ".join(' | ',map { "%-".$_."s" } @colwidth)." |";
-
-# Head of table
-printf "$format\n",(map { "?".$_ } @variables);
-print $hor_rule."\n";
-
-for my $r (@rows) {
-   printf "$format\n",@{$r};
+# Get max width of wanted output:
+my $wanted_max_width;
+my @term_size=GetTerminalSize();
+if(@term_size && $fitterminal) {
+   $wanted_max_width=$term_size[0];
 }
-print $hor_rule."\n";
+if($imposed_width) {
+   if($wanted_max_width) {
+      $wanted_max_width=$imposed_width if $imposed_width<$wanted_max_width;
+   }
+   else {
+      $wanted_max_width=$imposed_width;
+   }
+}
 
+sub get_good_bad {
+   use integer;
+   my ($w,$a,$good_pary,$bad_pary,$n_pary)=@_;
+   my @new_good=grep { $n_pary->[$_]<=$a } @{$bad_pary};
+   my @new_bad=grep { $n_pary->[$_]>$a } @{$bad_pary};
+   my @r=@{$n_pary};
+   for my $i (@new_good) { $r[$i]=$n_pary->[$i]; }
+   if(@new_bad==0 || @new_bad==@{$bad_pary}) {
+      my $wbad=0;
+      map { $wbad+=$n_pary->[$_] } @new_bad;
+      die "Can't fit table" unless($wbad);
+      for my $i (@new_bad) {
+         $r[$i]=($w*$n_pary->[$i])/$wbad;
+      }
+      return \@r;
+   }
+   else {
+      my $width_new_good=0;
+      map { $width_new_good += $n_pary->[$_] } @new_good;
+      my $new_w=$w-$width_new_good;
+      my $new_a=$new_w/@new_bad;
+      return get_good_bad($new_w,$new_a,\@new_good,\@new_bad,\@r);
+   }
+}
+
+sub min2 { $_[$_[0]>$_[1]]; }
+
+sub format_row {
+   my($format,$w_ary,$text_ary)=@_;
+   my @cols;
+   my $maxnbrows=0;
+   for(my $i=0;$i<@{$text_ary};++$i) {
+      my @subcol=unpack("(a$w_ary->[$i])*",$text_ary->[$i]);
+      push(@cols,\@subcol);
+      $maxnbrows=@subcol if $maxnbrows<@subcol;
+   }
+   my @rows;
+   for(my $i=0;$i<$maxnbrows;++$i) {
+      my @subrow;
+      for my $c (@cols) {
+         if(defined $c->[$i]) {
+            push(@subrow,$c->[$i]);
+         }
+         else {
+            push(@subrow,"");
+         }
+      }
+      push(@rows,\@subrow);
+   }
+   map { printf "$format\n",@{$_} } @rows;
+}
+
+my @colwidth_wrapped;
+{
+   use integer;
+   if($wanted_max_width && $table_natural_width>$wanted_max_width) {
+      # Truncate large columns to something reasonable
+      my @colwidth_trunc=map { min2($_,$wanted_max_width/2) } @colwidth;
+      #
+      my $w=$wanted_max_width-(2+3*($nbcols-1)+2);
+      @colwidth_wrapped=@{get_good_bad($w,$w/$nbcols,[],[0..($nbcols-1)],\@colwidth_trunc)};
+   }
+   else {
+      @colwidth_wrapped=@colwidth;
+   }
+}
+
+# Get the total (wrapped) width of the table:
+$totalwidth=0;
+map { $totalwidth += $_ } @colwidth_wrapped;
+my $table_wrapped_width=$totalwidth+2+3*($nbcols-1)+2;
+
+# Rules
+my $hor_rule_upper="┌─".join("─┬─",map { "─"x$_ } @colwidth_wrapped)."─┐";
+my $hor_rule_middle="├─".join("─┼─",map { "─"x$_ } @colwidth_wrapped)."─┤";
+my $hor_rule_lower="└─".join("─┴─",map { "─"x$_ } @colwidth_wrapped)."─┘";
+my $format="│ ".join(' │ ',map { "%-".$_."s" } @colwidth_wrapped)." │";
+
+print $hor_rule_upper."\n";
+my @hvariables=map { "?".$_ } @variables;
+format_row($format,\@colwidth_wrapped,\@hvariables);
+print $hor_rule_middle."\n";
+map { format_row($format,\@colwidth_wrapped,$_) } @rows;
+print $hor_rule_lower."\n";
+# Total:
 print "\n".@rows." results\n";
 
 # vim: set filetype=perl :
@@ -182,13 +280,35 @@ and outputs a table in text format.
 
 The common prefixes are used.
 
+=head1 OPTIONS
+
+=over 4
+
+=item -h, -?, --help
+
+Show this help and exit
+
+=item -v, --version
+
+Show version and exit
+
+=item --fit-to-terminal, --nofit-to-terminal
+
+Used if you pipe the output, you'll probably want to fit to terminal's width.
+
+=item --width W, -w W
+
+Impose width to be W
+
+=back
+
 =head1 LICENSE
 
 A very permissive one!
 
 =head1 VERSION
 
-0.1
+0.1.1
 
 =head1 AUTHOR
 

@@ -24,37 +24,37 @@ Play with it:
 The file `test.srx` contains the previous dump, and look:
 
     $ ./srx2text test.srx
-    ------------------------------------------------------------------------------------------------
-    | ?s                                                                          | ?p | ?o        |
-    ------------------------------------------------------------------------------------------------
-    | http://dbpedia.org/resource/!Action_Pact!                                   | a  | owl:Thing |
-    | http://dbpedia.org/resource/%22Solidarity%22_Szczecin-Goleni%C3%B3w_Airport | a  | owl:Thing |
-    | http://dbpedia.org/resource/%22The_Take_Over,_the_Breaks_Over%22            | a  | owl:Thing |
-    | http://dbpedia.org/resource/%C3%81g%C3%A6tis_byrjun                         | a  | owl:Thing |
-    | http://dbpedia.org/resource/%C3%81kos_R%C3%A1thonyi                         | a  | owl:Thing |
-    | http://dbpedia.org/resource/%C3%81lvaro_Arz%C3%BA                           | a  | owl:Thing |
-    | http://dbpedia.org/resource/%C3%81lvaro_Colom                               | a  | owl:Thing |
-    | http://dbpedia.org/resource/%C3%81lvaro_Rafael_Gonz%C3%A1lez                | a  | owl:Thing |
-    | http://dbpedia.org/resource/%C3%81lvaro_de_Castro                           | a  | owl:Thing |
-    | http://dbpedia.org/resource/%C3%81ngel_Berlanga                             | a  | owl:Thing |
-    ------------------------------------------------------------------------------------------------
+    ┌───────────────────────────────────────────────────────────────────────────────┬────┬───────────┐
+    │ ?s                                                                            │ ?p │ ?o        │
+    ├───────────────────────────────────────────────────────────────────────────────┼────┼───────────┤
+    │ <http://dbpedia.org/resource/!Action_Pact!>                                   │ a  │ owl:Thing │
+    │ <http://dbpedia.org/resource/%22Solidarity%22_Szczecin-Goleni%C3%B3w_Airport> │ a  │ owl:Thing │
+    │ <http://dbpedia.org/resource/%22The_Take_Over,_the_Breaks_Over%22>            │ a  │ owl:Thing │
+    │ <http://dbpedia.org/resource/%C3%81g%C3%A6tis_byrjun>                         │ a  │ owl:Thing │
+    │ <http://dbpedia.org/resource/%C3%81kos_R%C3%A1thonyi>                         │ a  │ owl:Thing │
+    │ <http://dbpedia.org/resource/%C3%81lvaro_Arz%C3%BA>                           │ a  │ owl:Thing │
+    │ <http://dbpedia.org/resource/%C3%81lvaro_Colom>                               │ a  │ owl:Thing │
+    │ <http://dbpedia.org/resource/%C3%81lvaro_Rafael_Gonz%C3%A1lez>                │ a  │ owl:Thing │
+    │ <http://dbpedia.org/resource/%C3%81lvaro_de_Castro>                           │ a  │ owl:Thing │
+    │ <http://dbpedia.org/resource/%C3%81ngel_Berlanga>                             │ a  │ owl:Thing │
+    └───────────────────────────────────────────────────────────────────────────────┴────┴───────────┘
     
     10 results
     $ ./query-sparql test.sparql | ./srx2text
-    ------------------------------------------------------------------------------------------------
-    | ?s                                                                          | ?p | ?o        |
-    ------------------------------------------------------------------------------------------------
-    | http://dbpedia.org/resource/!Action_Pact!                                   | a  | owl:Thing |
-    | http://dbpedia.org/resource/%22Solidarity%22_Szczecin-Goleni%C3%B3w_Airport | a  | owl:Thing |
-    | http://dbpedia.org/resource/%22The_Take_Over,_the_Breaks_Over%22            | a  | owl:Thing |
-    | http://dbpedia.org/resource/%C3%81g%C3%A6tis_byrjun                         | a  | owl:Thing |
-    | http://dbpedia.org/resource/%C3%81kos_R%C3%A1thonyi                         | a  | owl:Thing |
-    | http://dbpedia.org/resource/%C3%81lvaro_Arz%C3%BA                           | a  | owl:Thing |
-    | http://dbpedia.org/resource/%C3%81lvaro_Colom                               | a  | owl:Thing |
-    | http://dbpedia.org/resource/%C3%81lvaro_Rafael_Gonz%C3%A1lez                | a  | owl:Thing |
-    | http://dbpedia.org/resource/%C3%81lvaro_de_Castro                           | a  | owl:Thing |
-    | http://dbpedia.org/resource/%C3%81ngel_Berlanga                             | a  | owl:Thing |
-    ------------------------------------------------------------------------------------------------
+    ┌───────────────────────────────────────────────────────────────────────────────┬────┬───────────┐
+    │ ?s                                                                            │ ?p │ ?o        │
+    ├───────────────────────────────────────────────────────────────────────────────┼────┼───────────┤
+    │ <http://dbpedia.org/resource/!Action_Pact!>                                   │ a  │ owl:Thing │
+    │ <http://dbpedia.org/resource/%22Solidarity%22_Szczecin-Goleni%C3%B3w_Airport> │ a  │ owl:Thing │
+    │ <http://dbpedia.org/resource/%22The_Take_Over,_the_Breaks_Over%22>            │ a  │ owl:Thing │
+    │ <http://dbpedia.org/resource/%C3%81g%C3%A6tis_byrjun>                         │ a  │ owl:Thing │
+    │ <http://dbpedia.org/resource/%C3%81kos_R%C3%A1thonyi>                         │ a  │ owl:Thing │
+    │ <http://dbpedia.org/resource/%C3%81lvaro_Arz%C3%BA>                           │ a  │ owl:Thing │
+    │ <http://dbpedia.org/resource/%C3%81lvaro_Colom>                               │ a  │ owl:Thing │
+    │ <http://dbpedia.org/resource/%C3%81lvaro_Rafael_Gonz%C3%A1lez>                │ a  │ owl:Thing │
+    │ <http://dbpedia.org/resource/%C3%81lvaro_de_Castro>                           │ a  │ owl:Thing │
+    │ <http://dbpedia.org/resource/%C3%81ngel_Berlanga>                             │ a  │ owl:Thing │
+    └───────────────────────────────────────────────────────────────────────────────┴────┴───────────┘
     
     10 results
 
