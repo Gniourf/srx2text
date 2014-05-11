@@ -52,7 +52,7 @@ GetOptions(
 
 pod2usage(-exit => 0, -verbose => 2, -noperldoc => 1) if $help;
 if($version) {
-   print "srx2text 0.1.1\n";
+   print "srx2text 0.1.2\n";
    exit(0);
 }
 
@@ -92,38 +92,40 @@ my $results_node=$sparql_children[1];
 die "head node not found in first position" unless $head_node->nodeName eq "head";
 die "results node not found in second position" unless $results_node->nodeName eq "results";
 # Get variable nodes inside head
-my @head_children=$head_node->nonBlankChildNodes;
 my @variables=();
-for my $v (@head_children) {
+for my $v ($head_node->nonBlankChildNodes) {
    die "In head: not a variable node" unless $v->nodeName eq "variable";
-   die "variable node has no name attribute" unless $v->hasAttribute("name");
+   die "In head: variable node has no name attribute" unless $v->hasAttribute("name");
    push(@variables,$v->getAttribute("name"));
 }
 
 # Get result node inside results
-my @results_children=$results_node->nonBlankChildNodes;
 my @rows;
-my $nbcols;
-for my $r (@results_children) {
+for my $r ($results_node->nonBlankChildNodes) {
    die "In results: not a result node" unless $r->nodeName eq "result";
-   my @row;
-   my @r_children=$r->nonBlankChildNodes;
-   my $nbcols_tmp=0;
-   for my $b (@r_children) {
-      ++$nbcols_tmp;
+   my %hrow;
+   for my $b ($r->nonBlankChildNodes) {
       die "In result: not a binding node" unless $b->nodeName eq "binding";
+      die "In result: binding node doesn't have a name attribute" unless $b->hasAttribute("name");
+      my $variable=$b->getAttribute("name");
       my @b_children=$b->nonBlankChildNodes;
       die "binding node has ".@b_children." children! (should only have 1)" unless @b_children==1;
       my $uri=$b_children[0];
+      my $value;
       given($uri->nodeName) {
-         when (/^uri$/) { push(@row,format_uri($uri->textContent)); }
-         when (/^literal$/) { push(@row,$uri->textContent); }
+         when (/^uri$/) { $value=format_uri($uri->textContent); }
+         when (/^literal$/) { $value=$uri->textContent; }
          default { die "In binding: expecting uri or literal node. Found ".$uri->nodeName."\." unless $uri->nodeName eq "uri"; }
       }
+      $hrow{$variable}=$value;
    }
-   $nbcols=$nbcols_tmp unless defined $nbcols;
-   die "irregular number of columns" unless $nbcols==$nbcols_tmp;
-   die "can't have 0 columns" unless $nbcols;
+   my @row;
+   for my $var (@variables) {
+      my $topush;
+      if(defined $hrow{$var}) { $topush=$hrow{$var}; }
+      else { $topush=''; }
+      push(@row,$topush);
+   }
    push(@rows,\@row);
 }
 
@@ -149,6 +151,7 @@ for my $r (@rows) {
    }
 }
 
+my $nbcols=@variables;
 # Get the total (natural) width of the table:
 my $totalwidth=0;
 map { $totalwidth += $_ } @colwidth;
@@ -308,7 +311,7 @@ A very permissive one!
 
 =head1 VERSION
 
-0.1.1
+0.1.2
 
 =head1 AUTHOR
 
