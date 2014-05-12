@@ -51,7 +51,7 @@ GetOptions(
 
 pod2usage(-exit => 0, -verbose => 2, -noperldoc => 1) if $help;
 if($version) {
-   print "srx2text 0.1.7\n";
+   print "srx2text 0.1.8\n";
    exit(0);
 }
 
@@ -160,12 +160,11 @@ if (@rows==0) {
 #################
 
 # Get max length of each column
+# The 1+ accounts for the '?' symbol prepended to variable name
 my @colwidth=map { 1+length; } @variables;
 for my $r (@rows) {
-   for(my $i=0;$i<@{$r};++$i) {
-      my $l=length($r->[$i]);
-      $colwidth[$i]=$l if $colwidth[$i]<$l;
-   }
+   my $i=0;
+   @colwidth=map { my $l=length $r->[$i++]; $_<$l?$l:$_ } @colwidth;
 }
 
 my $nbcols=@variables;
@@ -177,9 +176,9 @@ my $table_natural_width=$totalwidth+2+3*($nbcols-1)+2;
 # Get max width of wanted output:
 my $wanted_max_width;
 my @term_size=GetTerminalSize();
-if(@term_size && $fitterminal) {
-   $wanted_max_width=$term_size[0];
-}
+
+$wanted_max_width=$term_size[0] if(@term_size && $fitterminal);
+
 if($imposed_width) {
    if($wanted_max_width) {
       $wanted_max_width=$imposed_width if $imposed_width<$wanted_max_width;
@@ -191,33 +190,29 @@ if($imposed_width) {
 
 sub get_good_bad {
    use integer;
-   my ($w,$a,$good_pary,$bad_pary,$n_pary)=@_;
+   my ($w,$good_pary,$bad_pary,$n_pary)=@_;
+   my $a=$w/@{$bad_pary};
    my @new_good=grep { $n_pary->[$_]<=$a } @{$bad_pary};
    my @new_bad=grep { $n_pary->[$_]>$a } @{$bad_pary};
    my @r=@{$n_pary};
-   for my $i (@new_good) { $r[$i]=$n_pary->[$i]; }
-   if(@new_bad==0) {
+   map { $r[$_]=$n_pary->[$_] } @new_good;
+   if(!@new_bad) {
       return \@r;
    }
    elsif(@new_bad==@{$bad_pary}) {
       my $wbad=0;
       map { $wbad+=$n_pary->[$_] } @new_bad;
       die "Can't fit table" unless($wbad);
-      for my $i (@new_bad) {
-         $r[$i]=($w*$n_pary->[$i])/$wbad;
-      }
+      map { $r[$_]=($w*$n_pary->[$_])/$wbad } @new_bad;
       return \@r;
    }
    else {
       my $width_new_good=0;
       map { $width_new_good += $n_pary->[$_] } @new_good;
       my $new_w=$w-$width_new_good;
-      my $new_a=$new_w/@new_bad;
-      return get_good_bad($new_w,$new_a,\@new_good,\@new_bad,\@r);
+      return get_good_bad($new_w,\@new_good,\@new_bad,\@r);
    }
 }
-
-sub min2 { $_[$_[0]>$_[1]]; }
 
 sub format_row {
    my($format,$w_ary,$text_ary)=@_;
@@ -231,14 +226,7 @@ sub format_row {
    my @rows;
    for(my $i=0;$i<$maxnbrows;++$i) {
       my @subrow;
-      for my $c (@cols) {
-         if(defined $c->[$i]) {
-            push(@subrow,$c->[$i]);
-         }
-         else {
-            push(@subrow,"");
-         }
-      }
+      map { push(@subrow,(defined $_->[$i])?$_->[$i]:"") } @cols;
       push(@rows,\@subrow);
    }
    map { printf "$format\n",@{$_} } @rows;
@@ -246,13 +234,10 @@ sub format_row {
 
 my @colwidth_wrapped;
 {
-   use integer;
    if($wanted_max_width && $table_natural_width>$wanted_max_width) {
-      # Truncate large columns to something reasonable
-      my @colwidth_trunc=map { min2($_,$wanted_max_width) } @colwidth;
-      #
+      my @colwidth_trunc=map { $_>$wanted_max_width?$wanted_max_width:$_ } @colwidth;
       my $w=$wanted_max_width-(2+3*($nbcols-1)+2);
-      @colwidth_wrapped=@{get_good_bad($w,$w/$nbcols,[],[0..($nbcols-1)],\@colwidth_trunc)};
+      @colwidth_wrapped=@{get_good_bad($w,[],[0..($nbcols-1)],\@colwidth_trunc)};
    }
    else {
       @colwidth_wrapped=@colwidth;
@@ -331,7 +316,7 @@ A very permissive one!
 
 =head1 VERSION
 
-0.1.7
+0.1.8
 
 =head1 AUTHOR
 
