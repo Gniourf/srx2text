@@ -54,7 +54,7 @@ GetOptions(
 
 pod2usage(-exit => 0, -verbose => 2, -noperldoc => 1) if $help;
 if($version) {
-   print "srx2text 0.1.12\n";
+   print "srx2text 0.1.13\n";
    exit(0);
 }
 
@@ -63,7 +63,7 @@ if(@ARGV) {
    map {
       if(open(my $fh ,'<', $_)) {
          binmode $fh;
-         print "File $_\n";
+         print "File $_\n" unless @ARGV==1;
          parse_srx($fh);
          ++$i;
          print "\n" unless($i==@ARGV);
@@ -336,7 +336,7 @@ A very permissive one!
 
 =head1 VERSION
 
-0.1.12
+0.1.13
 
 =head1 AUTHOR
 
