@@ -24,6 +24,7 @@ on `dbpedia.org` and the file `test.sparql` containing this query:
 
     #!/usr/local/bin/query-sparql
     
+    ### These options are passed as options to query-sparql!
     ###-h dbpedia.org
     ###-p 80
     
@@ -47,36 +48,36 @@ Play with it:
 The file `test.srx` contains the previous dump, and look:
 
     $ ./srx2text test.srx
-    ┌───────────────────────────────────────────────────────────────────────────────┬────┬───────────┐
-    │ ?s                                                                            │ ?p │ ?o        │
-    ├───────────────────────────────────────────────────────────────────────────────┼────┼───────────┤
-    │ <http://dbpedia.org/resource/!Action_Pact!>                                   │ a  │ owl:Thing │
-    │ <http://dbpedia.org/resource/%22Solidarity%22_Szczecin-Goleni%C3%B3w_Airport> │ a  │ owl:Thing │
-    │ <http://dbpedia.org/resource/%22The_Take_Over,_the_Breaks_Over%22>            │ a  │ owl:Thing │
-    │ <http://dbpedia.org/resource/%C3%81g%C3%A6tis_byrjun>                         │ a  │ owl:Thing │
-    │ <http://dbpedia.org/resource/%C3%81kos_R%C3%A1thonyi>                         │ a  │ owl:Thing │
-    │ <http://dbpedia.org/resource/%C3%81lvaro_Arz%C3%BA>                           │ a  │ owl:Thing │
-    │ <http://dbpedia.org/resource/%C3%81lvaro_Colom>                               │ a  │ owl:Thing │
-    │ <http://dbpedia.org/resource/%C3%81lvaro_Rafael_Gonz%C3%A1lez>                │ a  │ owl:Thing │
-    │ <http://dbpedia.org/resource/%C3%81lvaro_de_Castro>                           │ a  │ owl:Thing │
-    │ <http://dbpedia.org/resource/%C3%81ngel_Berlanga>                             │ a  │ owl:Thing │
-    └───────────────────────────────────────────────────────────────────────────────┴────┴───────────┘
+    ┌──────────────────────────────────────────────────────────────────────────┬────┬───────────┐
+    │ ?s                                                                       │ ?p │ ?o        │
+    ├──────────────────────────────────────────────────────────────────────────┼────┼───────────┤
+    │ <http://dbpedia.org/resource/!Action_Pact!>                              │ a  │ owl:Thing │
+    │ <http://dbpedia.org/resource/%22Solidarity%22_Szczecin-Goleniów_Airport> │ a  │ owl:Thing │
+    │ <http://dbpedia.org/resource/%22The_Take_Over,_the_Breaks_Over%22>       │ a  │ owl:Thing │
+    │ <http://dbpedia.org/resource/Ágætis_byrjun>                              │ a  │ owl:Thing │
+    │ <http://dbpedia.org/resource/Ákos_Ráthonyi>                              │ a  │ owl:Thing │
+    │ <http://dbpedia.org/resource/Álvaro_Arzú>                                │ a  │ owl:Thing │
+    │ <http://dbpedia.org/resource/Álvaro_Colom>                               │ a  │ owl:Thing │
+    │ <http://dbpedia.org/resource/Álvaro_Rafael_González>                     │ a  │ owl:Thing │
+    │ <http://dbpedia.org/resource/Álvaro_de_Castro>                           │ a  │ owl:Thing │
+    │ <http://dbpedia.org/resource/Ángel_Berlanga>                             │ a  │ owl:Thing │
+    └──────────────────────────────────────────────────────────────────────────┴────┴───────────┘
     10 results
     $ ./query-sparql test.sparql | ./srx2text
-    ┌───────────────────────────────────────────────────────────────────────────────┬────┬───────────┐
-    │ ?s                                                                            │ ?p │ ?o        │
-    ├───────────────────────────────────────────────────────────────────────────────┼────┼───────────┤
-    │ <http://dbpedia.org/resource/!Action_Pact!>                                   │ a  │ owl:Thing │
-    │ <http://dbpedia.org/resource/%22Solidarity%22_Szczecin-Goleni%C3%B3w_Airport> │ a  │ owl:Thing │
-    │ <http://dbpedia.org/resource/%22The_Take_Over,_the_Breaks_Over%22>            │ a  │ owl:Thing │
-    │ <http://dbpedia.org/resource/%C3%81g%C3%A6tis_byrjun>                         │ a  │ owl:Thing │
-    │ <http://dbpedia.org/resource/%C3%81kos_R%C3%A1thonyi>                         │ a  │ owl:Thing │
-    │ <http://dbpedia.org/resource/%C3%81lvaro_Arz%C3%BA>                           │ a  │ owl:Thing │
-    │ <http://dbpedia.org/resource/%C3%81lvaro_Colom>                               │ a  │ owl:Thing │
-    │ <http://dbpedia.org/resource/%C3%81lvaro_Rafael_Gonz%C3%A1lez>                │ a  │ owl:Thing │
-    │ <http://dbpedia.org/resource/%C3%81lvaro_de_Castro>                           │ a  │ owl:Thing │
-    │ <http://dbpedia.org/resource/%C3%81ngel_Berlanga>                             │ a  │ owl:Thing │
-    └───────────────────────────────────────────────────────────────────────────────┴────┴───────────┘
+    ┌──────────────────────────────────────────────────────────────────────────┬────┬───────────┐
+    │ ?s                                                                       │ ?p │ ?o        │
+    ├──────────────────────────────────────────────────────────────────────────┼────┼───────────┤
+    │ <http://dbpedia.org/resource/!Action_Pact!>                              │ a  │ owl:Thing │
+    │ <http://dbpedia.org/resource/%22Solidarity%22_Szczecin-Goleniów_Airport> │ a  │ owl:Thing │
+    │ <http://dbpedia.org/resource/%22The_Take_Over,_the_Breaks_Over%22>       │ a  │ owl:Thing │
+    │ <http://dbpedia.org/resource/Ágætis_byrjun>                              │ a  │ owl:Thing │
+    │ <http://dbpedia.org/resource/Ákos_Ráthonyi>                              │ a  │ owl:Thing │
+    │ <http://dbpedia.org/resource/Álvaro_Arzú>                                │ a  │ owl:Thing │
+    │ <http://dbpedia.org/resource/Álvaro_Colom>                               │ a  │ owl:Thing │
+    │ <http://dbpedia.org/resource/Álvaro_Rafael_González>                     │ a  │ owl:Thing │
+    │ <http://dbpedia.org/resource/Álvaro_de_Castro>                           │ a  │ owl:Thing │
+    │ <http://dbpedia.org/resource/Ángel_Berlanga>                             │ a  │ owl:Thing │
+    └──────────────────────────────────────────────────────────────────────────┴────┴───────────┘
     10 results
 
 Make sure you read the help files to learn about the options:
@@ -105,7 +106,7 @@ and you'll get your results in a nice table on the terminal.
 The reference for `.srx` files is (as of now):
 [SPARQL Query Results XML Format (Second Edition), W3C Recommendation 21 March 2013](http://www.w3.org/TR/rdf-sparql-XMLres/).
 I have only very quickly scanned the document so `srx2text` might not be
-compliant. But hey, this is only version 0.1 and I can already work with it!
+100% compliant. But hey, this is only version 0.1 and I can already work with it!
 
 Author:
 - Gniourf Gniourf <gniourfgniourf@gmail.com>.
