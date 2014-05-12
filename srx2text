@@ -55,19 +55,27 @@ GetOptions(
 
 pod2usage(-exit => 0, -verbose => 2, -noperldoc => 1) if $help;
 if($version) {
-   print "srx2text 0.1.9\n";
+   print "srx2text 0.1.10\n";
    exit(0);
 }
 
-my $fh;
 if(@ARGV) {
-   my $file=shift;
-   open($fh ,'<', $file) || die "can't open file or standard input for reading: $!";
+   my $i;
+   map {
+      my $fh;
+      open($fh ,'<', $_) || die "can't open file or standard input for reading: $!";
+      binmode $fh;
+      print "File $_\n";
+      parse_srx($fh);
+      ++$i;
+      print "\n" unless($i==@ARGV);
+   } @ARGV;
 }
 else {
-   $fh=\*STDIN;
+   my $fh=\*STDIN;
+   binmode $fh;
+   parse_srx($fh);
 }
-binmode $fh;
 
 #
 sub format_uri {
@@ -91,112 +99,78 @@ sub format_uri {
    return $uri;
 }
 
-my $doc=XML::LibXML->load_xml(IO=>$fh);
+sub parse_srx {
+   my $fh=shift;
+   my $doc=XML::LibXML->load_xml(IO=>$fh);
 
-my $sparql_node=$doc->firstChild;
-die "First node isn't sparql" unless $sparql_node->nodeName eq "sparql";
+   my $sparql_node=$doc->firstChild;
+   die "First node isn't sparql" unless $sparql_node->nodeName eq "sparql";
 
-my $sparql_children=\@{$sparql_node->nonBlankChildNodes};
-my $head_node=$sparql_children->[0];
-die "head node not found in first position" unless $head_node->nodeName eq "head";
-#
-my $results_node=$sparql_children->[1];
-my @results_children=$results_node->nonBlankChildNodes;
-my $result_type=$results_node->nodeName;
+   my $sparql_children=\@{$sparql_node->nonBlankChildNodes};
+   my $head_node=$sparql_children->[0];
+   die "head node not found in first position" unless $head_node->nodeName eq "head";
+   #
+   my $results_node=$sparql_children->[1];
+   my @results_children=$results_node->nonBlankChildNodes;
+   my $result_type=$results_node->nodeName;
 
-my @variables;
-my @rows;
-if($result_type eq "results") {
-   # Get variable and link nodes inside head
-   my $inlink;
-   for my $v ($head_node->nonBlankChildNodes) {
-      given($v->nodeName) {
-         when($_ eq "variable") { die "variable node after link node" if $inlink; push(@variables,$v->getAttribute("name")); }
-         when($_ eq "link") { $inlink=1; }
-         default { die "In head: bad node ".$v->nodeName.". Expecting variable or link node"; }
-      }
-   }
-   # Get result node inside results
-   for my $r (@results_children) {
-      die "In results: not a result node" unless $r->nodeName eq "result";
-      my %hrow;
-      for my $b ($r->nonBlankChildNodes) {
-         die "In result: not a binding node" unless $b->nodeName eq "binding";
-         die "In result: binding node doesn't have a name attribute" unless $b->hasAttribute("name");
-         my $variable=$b->getAttribute("name");
-         my $b_children=\@{$b->nonBlankChildNodes};
-         die "binding node has ".@{$b_children}." children! (should only have 1)" unless @${b_children}==1;
-         my $uri=$b_children->[0];
-         my $value;
-         given($uri->nodeName) {
-            when ($_ eq "uri") { $value=format_uri($uri->textContent); }
-            when ($_ eq "literal") { $value=$uri->textContent; }
-            when ($_ eq "bnode") { $value="_:".$uri->textContent; }
-            default { die "In binding: expecting uri, literal or bnode node. Found ".$uri->nodeName."\."; }
+   my @variables;
+   my @rows;
+   if($result_type eq "results") {
+      # Get variable and link nodes inside head
+      my $inlink;
+      for my $v ($head_node->nonBlankChildNodes) {
+         given($v->nodeName) {
+            when($_ eq "variable") { die "variable node after link node" if $inlink; push(@variables,$v->getAttribute("name")); }
+            when($_ eq "link") { $inlink=1; }
+            default { die "In head: bad node ".$v->nodeName.". Expecting variable or link node"; }
          }
-         $hrow{$variable}=$value;
       }
-      my @row;
-      for my $var (@variables) {
-         my $topush;
-         if(defined $hrow{$var}) { $topush=$hrow{$var}; }
-         else { $topush=''; }
-         push(@row,$topush);
+      # Get result node inside results
+      for my $r (@results_children) {
+         die "In results: not a result node" unless $r->nodeName eq "result";
+         my %hrow;
+         for my $b ($r->nonBlankChildNodes) {
+            die "In result: not a binding node" unless $b->nodeName eq "binding";
+            die "In result: binding node doesn't have a name attribute" unless $b->hasAttribute("name");
+            my $variable=$b->getAttribute("name");
+            my $b_children=\@{$b->nonBlankChildNodes};
+            die "binding node has ".@{$b_children}." children! (should only have 1)" unless @${b_children}==1;
+            my $uri=$b_children->[0];
+            my $value;
+            given($uri->nodeName) {
+               when ($_ eq "uri") { $value=format_uri($uri->textContent); }
+               when ($_ eq "literal") { $value=$uri->textContent; }
+               when ($_ eq "bnode") { $value="_:".$uri->textContent; }
+               default { die "In binding: expecting uri, literal or bnode node. Found ".$uri->nodeName."\."; }
+            }
+            $hrow{$variable}=$value;
+         }
+         my @row;
+         for my $var (@variables) {
+            my $topush;
+            if(defined $hrow{$var}) { $topush=$hrow{$var}; }
+            else { $topush=''; }
+            push(@row,$topush);
+         }
+         push(@rows,\@row);
       }
-      push(@rows,\@row);
    }
-}
-elsif($result_type eq "boolean") {
-   my $banswer=$results_children[0]->textContent;
-   die "Bad boolean: $banswer" unless grep { $_ eq $banswer } ( "true", "false" );
-   print $banswer."\n";
-   exit(0);
-}
-else {
-   die "Not a valid node: $result_type at this position";
-}
-
-#################
-# Print results #
-#################
-
-if (@rows==0) {
-   print "No results\n";
-   exit(0);
-}
-
-#################
-# Format output #
-#################
-
-# Get max length of each column
-# The 1+ accounts for the '?' symbol prepended to variable name
-my @colwidth=map { 1+length; } @variables;
-for my $r (@rows) {
-   my $i=0;
-   @colwidth=map { my $l=length $r->[$i++]; $_<$l?$l:$_ } @colwidth;
-}
-
-my $nbcols=@variables;
-# Get the total (natural) width of the table:
-my $totalwidth=0;
-map { $totalwidth += $_ } @colwidth;
-my $table_natural_width=$totalwidth+2+3*($nbcols-1)+2;
-
-# Get max width of wanted output:
-my $wanted_max_width;
-my @term_size=GetTerminalSize();
-
-$wanted_max_width=$term_size[0] if(@term_size && $fitterminal);
-
-if($imposed_width) {
-   if($wanted_max_width) {
-      $wanted_max_width=$imposed_width if $imposed_width<$wanted_max_width;
+   elsif($result_type eq "boolean") {
+      my $banswer=$results_children[0]->textContent;
+      die "Bad boolean: $banswer" unless grep { $_ eq $banswer } ( "true", "false" );
+      print $banswer."\n";
+      exit(0);
    }
    else {
-      $wanted_max_width=$imposed_width;
+      die "Not a valid node: $result_type at this position";
    }
+   print_table(\@variables,\@rows);
 }
+
+################
+# Table format #
+################
 
 sub get_good_bad {
    use integer;
@@ -242,8 +216,43 @@ sub format_row {
    map { printf "$format\n",@{$_} } @rows;
 }
 
-my @colwidth_wrapped;
-{
+sub print_table {
+   my ($variables_pary,$rows_pary)=@_;
+   if (@{$rows_pary}==0) {
+      print "No results\n";
+      return 1;
+   }
+   
+   # Get max length of each column
+   # The 1+ accounts for the '?' symbol prepended to variable name
+   my @colwidth=map { 1+length; } @{$variables_pary};
+   for my $r (@{$rows_pary}) {
+      my $i=0;
+      @colwidth=map { my $l=length $r->[$i++]; $_<$l?$l:$_ } @colwidth;
+   }
+   
+   my $nbcols=@{$variables_pary};
+   # Get the total (natural) width of the table:
+   my $totalwidth=0;
+   map { $totalwidth += $_ } @colwidth;
+   my $table_natural_width=$totalwidth+2+3*($nbcols-1)+2;
+   
+   # Get max width of wanted output:
+   my $wanted_max_width;
+   my @term_size=GetTerminalSize();
+   
+   $wanted_max_width=$term_size[0] if(@term_size && $fitterminal);
+   
+   if($imposed_width) {
+      if($wanted_max_width) {
+         $wanted_max_width=$imposed_width if $imposed_width<$wanted_max_width;
+      }
+      else {
+         $wanted_max_width=$imposed_width;
+      }
+   }
+   
+   my @colwidth_wrapped;
    if($wanted_max_width && $table_natural_width>$wanted_max_width) {
       my @colwidth_trunc=map { $_>$wanted_max_width?$wanted_max_width:$_ } @colwidth;
       my $w=$wanted_max_width-(2+3*($nbcols-1)+2);
@@ -252,27 +261,27 @@ my @colwidth_wrapped;
    else {
       @colwidth_wrapped=@colwidth;
    }
+   
+   # Get the total (wrapped) width of the table:
+   $totalwidth=0;
+   map { $totalwidth += $_ } @colwidth_wrapped;
+   my $table_wrapped_width=$totalwidth+2+3*($nbcols-1)+2;
+   
+   # Rules
+   my $hor_rule_upper="┌─".join("─┬─",map { "─"x$_ } @colwidth_wrapped)."─┐";
+   my $hor_rule_middle="├─".join("─┼─",map { "─"x$_ } @colwidth_wrapped)."─┤";
+   my $hor_rule_lower="└─".join("─┴─",map { "─"x$_ } @colwidth_wrapped)."─┘";
+   my $format="│ ".join(' │ ',map { "%-".$_."s" } @colwidth_wrapped)." │";
+   
+   print $hor_rule_upper."\n";
+   my @hvariables=map { "?".$_ } @{$variables_pary};
+   format_row($format,\@colwidth_wrapped,\@hvariables);
+   print $hor_rule_middle."\n";
+   map { format_row($format,\@colwidth_wrapped,$_) } @{$rows_pary};
+   print $hor_rule_lower."\n";
+   # Total:
+   print @{$rows_pary}." result".(@{$rows_pary}>1?"s":"")."\n";
 }
-
-# Get the total (wrapped) width of the table:
-$totalwidth=0;
-map { $totalwidth += $_ } @colwidth_wrapped;
-my $table_wrapped_width=$totalwidth+2+3*($nbcols-1)+2;
-
-# Rules
-my $hor_rule_upper="┌─".join("─┬─",map { "─"x$_ } @colwidth_wrapped)."─┐";
-my $hor_rule_middle="├─".join("─┼─",map { "─"x$_ } @colwidth_wrapped)."─┤";
-my $hor_rule_lower="└─".join("─┴─",map { "─"x$_ } @colwidth_wrapped)."─┘";
-my $format="│ ".join(' │ ',map { "%-".$_."s" } @colwidth_wrapped)." │";
-
-print $hor_rule_upper."\n";
-my @hvariables=map { "?".$_ } @variables;
-format_row($format,\@colwidth_wrapped,\@hvariables);
-print $hor_rule_middle."\n";
-map { format_row($format,\@colwidth_wrapped,$_) } @rows;
-print $hor_rule_lower."\n";
-# Total:
-print @rows." result".(@rows>1?"s":"")."\n";
 
 # vim: set filetype=perl :
 
@@ -288,11 +297,11 @@ srx2text
 
 =head1 USAGE
 
-srx2text [FILENAME]
+srx2text [FILES...]
 
 =head1 SYNOPSIS
 
-Reads FILENAME or standard input, that must be a well-formed srx file
+Reads FILES... or standard input, that must be a well-formed srx file
 (sparql-results+xml), see L<http://www.w3.org/TR/rdf-sparql-query/>,
 and outputs a table in text format.
 
@@ -332,7 +341,7 @@ A very permissive one!
 
 =head1 VERSION
 
-0.1.9
+0.1.10
 
 =head1 AUTHOR
 
