@@ -54,7 +54,7 @@ GetOptions(
 
 pod2usage(-exit => 0, -verbose => 2, -noperldoc => 1) if $help;
 if($version) {
-   print "srx2text 0.1.15\n";
+   print "srx2text 0.1.16\n";
    exit(0);
 }
 
@@ -226,7 +226,8 @@ sub print_table {
    # Get max width of wanted output:
    my $wanted_max_width=$table_natural_width;
    my @term_size=GetTerminalSize();
-   $wanted_max_width=$term_size[0] if(@term_size && $fitterminal);
+   $wanted_max_width=$term_size[0] if(@term_size && $term_size[0] && $fitterminal);
+   $wanted_max_width=min($table_natural_width,$wanted_max_width);
    
    if($imposed_width>0) {
       if($wanted_max_width) { $wanted_max_width=$imposed_width if $imposed_width<$wanted_max_width; }
@@ -243,13 +244,13 @@ sub print_table {
    # Last chance to grow columns or die!
    $totalwidth=0;
    for (@colwidth_wrapped) { $totalwidth += $_ }
-   my $space_left=$wanted_max_width_without_border-$totalwidth;
-   while($space_left>0) {
+   for(my $space_left=$wanted_max_width_without_border-$totalwidth;$space_left>0;) {
       my $i=0;
       my @score=map { $_/$colwidth[$i++] } @colwidth_wrapped;
       my $min=min(@score);
       for (grep { $score[$_]==$min } 0..(@score-1)) {
          if($space_left-->0) { ++$colwidth_wrapped[$_]; ++$totalwidth; }
+         else { last }
       }
    }
    die "Can't fit table" if grep { $_<1 } @colwidth_wrapped;
@@ -328,7 +329,7 @@ A very permissive one!
 
 =head1 VERSION
 
-0.1.15
+0.1.16
 
 =head1 AUTHOR
 
