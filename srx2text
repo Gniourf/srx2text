@@ -54,7 +54,7 @@ GetOptions(
 
 pod2usage(-exit => 0, -verbose => 2, -noperldoc => 1) if $help;
 if($version) {
-   print "srx2text 0.1.13\n";
+   print "srx2text 0.1.14\n";
    exit(0);
 }
 
@@ -83,7 +83,7 @@ else {
 sub format_uri {
    my $uri=shift;
    my $found;
-   keys %prefixes; # Explicitely reset the each iterator
+   keys %prefixes; # Explicitly reset the each iterator
    while(my ($prefix,$prefix_uri)=each %prefixes) {
       if(index($uri,$prefix_uri)==0) {
          $uri=$prefix.":".(substr $uri,(length $prefix_uri));
@@ -168,44 +168,38 @@ sub parse_srx {
 ################
 
 sub get_good_bad {
-   use integer;
    my ($w,$good_pary,$bad_pary,$n_pary)=@_;
    my $a=$w/@{$bad_pary};
    my @new_good=grep { $n_pary->[$_]<=$a } @{$bad_pary};
    my @new_bad=grep { $n_pary->[$_]>$a } @{$bad_pary};
    my @r=@{$n_pary};
    map { $r[$_]=$n_pary->[$_] } @new_good;
-   if(!@new_bad) {
-      return \@r;
-   }
+   if(!@new_bad) { return \@r; }
    elsif(@new_bad==@{$bad_pary}) {
       my $wbad=0;
       map { $wbad+=$n_pary->[$_] } @new_bad;
-      die "Can't fit table" unless($wbad);
-      map { $r[$_]=($w*$n_pary->[$_])/$wbad } @new_bad;
+      map { $r[$_]=int (($w*$n_pary->[$_])/$wbad) } @new_bad;
       return \@r;
    }
    else {
       my $width_new_good=0;
       map { $width_new_good += $n_pary->[$_] } @new_good;
-      my $new_w=$w-$width_new_good;
-      return get_good_bad($new_w,\@new_good,\@new_bad,\@r);
+      return get_good_bad($w-$width_new_good,\@new_good,\@new_bad,\@r);
    }
 }
 
 sub format_row {
-   my($format,$w_ary,$text_ary)=@_;
+   my($format,$w_pary,$text_pary)=@_;
    my @cols;
    my $maxnbrows=0;
-   for(my $i=0;$i<@{$text_ary};++$i) {
-      my @subcol=unpack("(a$w_ary->[$i])*",$text_ary->[$i]);
+   for(my $i=0;$i<@{$text_pary};++$i) {
+      my @subcol=unpack("(a$w_pary->[$i])*",$text_pary->[$i]);
       push(@cols,\@subcol);
       $maxnbrows=@subcol if $maxnbrows<@subcol;
    }
    my @rows;
    for(my $i=0;$i<$maxnbrows;++$i) {
-      my @subrow;
-      map { push(@subrow,(defined $_->[$i])?$_->[$i]:"") } @cols;
+      my @subrow=map { defined $_->[$i]?$_->[$i]:'' } @cols;
       push(@rows,\@subrow);
    }
    map { printf "$format\n",@{$_} } @rows;
@@ -213,9 +207,9 @@ sub format_row {
 
 sub print_table {
    my ($variables_pary,$rows_pary)=@_;
-   if (@{$rows_pary}==0) {
+   unless (@{$rows_pary}) {
       print "No results\n";
-      return 1;
+      return;
    }
    
    # Get max length of each column
@@ -238,7 +232,7 @@ sub print_table {
    
    $wanted_max_width=$term_size[0] if(@term_size && $fitterminal);
    
-   if($imposed_width) {
+   if($imposed_width>0) {
       if($wanted_max_width) {
          $wanted_max_width=$imposed_width if $imposed_width<$wanted_max_width;
       }
@@ -247,21 +241,26 @@ sub print_table {
       }
    }
    
-   my @colwidth_wrapped;
+   my @colwidth_wrapped=@colwidth;
+   my $wanted_max_width_without_border=$wanted_max_width-(2+3*($nbcols-1)+2);
    if($wanted_max_width && $table_natural_width>$wanted_max_width) {
       my @colwidth_trunc=map { $_>$wanted_max_width?$wanted_max_width:$_ } @colwidth;
-      my $w=$wanted_max_width-(2+3*($nbcols-1)+2);
-      @colwidth_wrapped=@{get_good_bad($w,[],[0..($nbcols-1)],\@colwidth_trunc)};
+      @colwidth_wrapped=@{get_good_bad($wanted_max_width_without_border,[],[0..($nbcols-1)],\@colwidth_trunc)};
    }
-   else {
-      @colwidth_wrapped=@colwidth;
-   }
-   
-   # Get the total (wrapped) width of the table:
+
+   # Last chance to grow columns or die!
    $totalwidth=0;
    map { $totalwidth += $_ } @colwidth_wrapped;
-   my $table_wrapped_width=$totalwidth+2+3*($nbcols-1)+2;
-   
+   my $space_left=$wanted_max_width_without_border-$totalwidth;
+   while($space_left>0) {
+      my $i=0;
+      my @score=map { $_/$colwidth[$i++] } @colwidth_wrapped;
+      my $min=$score[0];
+      map { $min=$min>$_?$_:$min } @score;
+      map { if($space_left-->0) { ++$colwidth_wrapped[$_]; ++$totalwidth; } } grep { $score[$_]==$min } 0..(@score-1);
+   }
+   die "Can't fit table" if grep { $_<1 } @colwidth_wrapped;
+
    # Rules
    my $hor_rule_upper="┌─".join("─┬─",map { "─"x$_ } @colwidth_wrapped)."─┐";
    my $hor_rule_middle="├─".join("─┼─",map { "─"x$_ } @colwidth_wrapped)."─┤";
@@ -336,7 +335,7 @@ A very permissive one!
 
 =head1 VERSION
 
-0.1.13
+0.1.14
 
 =head1 AUTHOR
 
