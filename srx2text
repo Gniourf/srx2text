@@ -54,13 +54,13 @@ GetOptions(
 
 pod2usage(-exit => 0, -verbose => 2, -noperldoc => 1) if $help;
 if($version) {
-   print "srx2text 0.1.14\n";
+   print "srx2text 0.1.15\n";
    exit(0);
 }
 
 if(@ARGV) {
    my $i;
-   map {
+   for (@ARGV) {
       if(open(my $fh ,'<', $_)) {
          binmode $fh;
          print "File $_\n" unless @ARGV==1;
@@ -71,7 +71,7 @@ if(@ARGV) {
       else {
          warn "Can't open file `$_' for reading: $!";
       }
-   } @ARGV;
+   };
 }
 else {
    my $fh=\*STDIN;
@@ -82,22 +82,18 @@ else {
 #
 sub format_uri {
    my $uri=shift;
+   $uri=URI->new($uri)->as_iri if $show_iri;
    my $found;
    keys %prefixes; # Explicitly reset the each iterator
    while(my ($prefix,$prefix_uri)=each %prefixes) {
-      if(index($uri,$prefix_uri)==0) {
+      unless(index($uri,$prefix_uri)) {
          $uri=$prefix.":".(substr $uri,(length $prefix_uri));
          $found=1;
          last;
       }
    }
-   if($found) {
-      $uri="a" if($uri eq "rdf:type");
-   }
-   else {
-      $uri=URI->new($uri)->as_iri if $show_iri;
-      $uri="<".$uri.">";
-   }
+   if($found) { $uri="a" if($uri eq "rdf:type") }
+   else { $uri="<".$uri.">" }
    return $uri;
 }
 
@@ -116,20 +112,20 @@ sub parse_srx {
    #
    my $results_node=$sparql_children->[1];
 
-   my @variables;
-   my @rows;
    given($results_node->nodeName) {
       when($_ eq "results") {
          # Get variable and link nodes inside head
          my $inlink;
-         for my $v ($head_node->nonBlankChildNodes) {
+         my @variables=map {
+            my $v=$_;
             given($v->nodeName) {
-               when($_ eq "variable") { die "variable node after link node" if $inlink; push(@variables,$v->getAttribute("name")); }
-               when($_ eq "link") { $inlink=1; }
-               default { die "In head: bad node ".$v->nodeName.". Expecting variable or link node"; }
+               when("variable") { die "variable node after link node" if $inlink; $v->getAttribute("name") }
+               when("link") { $inlink=1 }
+               default { die "In head: bad node ".$v->nodeName.". Expecting variable or link node" }
             }
-         }
+         } ($head_node->nonBlankChildNodes);
          # Get result node inside results
+         my @rows;
          for my $r ($results_node->nonBlankChildNodes) {
             die "In results: not a result node" unless $r->nodeName eq "result";
             my %hrow;
@@ -137,30 +133,29 @@ sub parse_srx {
                die "In result: not a binding node" unless $b->nodeName eq "binding";
                my $variable=$b->getAttribute("name") || die "In result: binding node doesn't have a name attribute";
                my $b_children=\@{$b->nonBlankChildNodes};
-               die "binding node has ".@{$b_children}." children! (should only have 1)" unless @${b_children}==1;
+               die "binding node has ".@$b_children." children! (should only have 1)" unless @$b_children==1;
                my $uri=$b_children->[0];
                my $value;
                given($uri->nodeName) {
-                  when ($_ eq "uri") { $value=format_uri($uri->textContent); }
-                  when ($_ eq "literal") { $value=$uri->textContent; }
-                  when ($_ eq "bnode") { $value="_:".$uri->textContent; }
-                  default { die "In binding: expecting uri, literal or bnode node. Found ".$uri->nodeName."\."; }
+                  when ("uri") { $value=format_uri($uri->textContent) }
+                  when ("literal") { $value=$uri->textContent }
+                  when ("bnode") { $value="_:".$uri->textContent }
+                  default { die "In binding: expecting uri, literal or bnode node. Found ".$uri->nodeName."\." }
                }
                $hrow{$variable}=$value;
             }
             my @row=map { defined $hrow{$_}?$hrow{$_}:'' } @variables;
             push(@rows,\@row);
          }
+         print_table(\@variables,\@rows);
       }
       when($_ eq "boolean") {
          my $banswer=($results_node->nonBlankChildNodes)[0]->textContent;
-         die "Bad boolean: $banswer" unless grep { $_ eq $banswer } ( "true", "false" );
+         die "Bad boolean: $banswer" unless grep { $banswer } ( "true", "false" );
          print $banswer."\n";
-         exit(0);
       }
-      default { die "Not a valid node: $_ at this position"; }
+      default { die "Not a valid node: $_ at this position" }
    }
-   print_table(\@variables,\@rows);
 }
 
 ################
@@ -173,17 +168,17 @@ sub get_good_bad {
    my @new_good=grep { $n_pary->[$_]<=$a } @{$bad_pary};
    my @new_bad=grep { $n_pary->[$_]>$a } @{$bad_pary};
    my @r=@{$n_pary};
-   map { $r[$_]=$n_pary->[$_] } @new_good;
-   if(!@new_bad) { return \@r; }
+   for (@new_good) { $r[$_]=$n_pary->[$_] }
+   if(!@new_bad) { return \@r }
    elsif(@new_bad==@{$bad_pary}) {
       my $wbad=0;
-      map { $wbad+=$n_pary->[$_] } @new_bad;
-      map { $r[$_]=int (($w*$n_pary->[$_])/$wbad) } @new_bad;
+      for (@new_bad) { $wbad+=$n_pary->[$_] }
+      for (@new_bad) { $r[$_]=int (($w*$n_pary->[$_])/$wbad) }
       return \@r;
    }
    else {
       my $width_new_good=0;
-      map { $width_new_good += $n_pary->[$_] } @new_good;
+      for (@new_good) { $width_new_good += $n_pary->[$_] }
       return get_good_bad($w-$width_new_good,\@new_good,\@new_bad,\@r);
    }
 }
@@ -202,43 +197,40 @@ sub format_row {
       my @subrow=map { defined $_->[$i]?$_->[$i]:'' } @cols;
       push(@rows,\@subrow);
    }
-   map { printf "$format\n",@{$_} } @rows;
+   for (@rows) { printf "$format\n",@{$_} }
 }
+
+sub min { my $min=shift; for (@_) { $min=$_ if $min>$_ } $min }
 
 sub print_table {
    my ($variables_pary,$rows_pary)=@_;
-   unless (@{$rows_pary}) {
+   unless (@$rows_pary) {
       print "No results\n";
       return;
    }
    
    # Get max length of each column
    # The 1+ accounts for the '?' symbol prepended to variable name
-   my @colwidth=map { 1+length; } @{$variables_pary};
-   for my $r (@{$rows_pary}) {
-      my $i=0;
+   my @colwidth=map { 1+length; } @$variables_pary;
+   for my $r (@$rows_pary) {
+      my $i;
       @colwidth=map { my $l=length $r->[$i++]; $_<$l?$l:$_ } @colwidth;
    }
    
-   my $nbcols=@{$variables_pary};
+   my $nbcols=@$variables_pary;
    # Get the total (natural) width of the table:
    my $totalwidth=0;
-   map { $totalwidth += $_ } @colwidth;
+   for (@colwidth) { $totalwidth += $_ }
    my $table_natural_width=$totalwidth+2+3*($nbcols-1)+2;
    
    # Get max width of wanted output:
-   my $wanted_max_width;
+   my $wanted_max_width=$table_natural_width;
    my @term_size=GetTerminalSize();
-   
    $wanted_max_width=$term_size[0] if(@term_size && $fitterminal);
    
    if($imposed_width>0) {
-      if($wanted_max_width) {
-         $wanted_max_width=$imposed_width if $imposed_width<$wanted_max_width;
-      }
-      else {
-         $wanted_max_width=$imposed_width;
-      }
+      if($wanted_max_width) { $wanted_max_width=$imposed_width if $imposed_width<$wanted_max_width; }
+      else { $wanted_max_width=$imposed_width; }
    }
    
    my @colwidth_wrapped=@colwidth;
@@ -250,14 +242,15 @@ sub print_table {
 
    # Last chance to grow columns or die!
    $totalwidth=0;
-   map { $totalwidth += $_ } @colwidth_wrapped;
+   for (@colwidth_wrapped) { $totalwidth += $_ }
    my $space_left=$wanted_max_width_without_border-$totalwidth;
    while($space_left>0) {
       my $i=0;
       my @score=map { $_/$colwidth[$i++] } @colwidth_wrapped;
-      my $min=$score[0];
-      map { $min=$min>$_?$_:$min } @score;
-      map { if($space_left-->0) { ++$colwidth_wrapped[$_]; ++$totalwidth; } } grep { $score[$_]==$min } 0..(@score-1);
+      my $min=min(@score);
+      for (grep { $score[$_]==$min } 0..(@score-1)) {
+         if($space_left-->0) { ++$colwidth_wrapped[$_]; ++$totalwidth; }
+      }
    }
    die "Can't fit table" if grep { $_<1 } @colwidth_wrapped;
 
@@ -268,13 +261,13 @@ sub print_table {
    my $format="│ ".join(' │ ',map { "%-".$_."s" } @colwidth_wrapped)." │";
    
    print $hor_rule_upper."\n";
-   my @hvariables=map { "?".$_ } @{$variables_pary};
+   my @hvariables=map { "?".$_ } @$variables_pary;
    format_row($format,\@colwidth_wrapped,\@hvariables);
    print $hor_rule_middle."\n";
-   map { format_row($format,\@colwidth_wrapped,$_) } @{$rows_pary};
+   for (@$rows_pary) { format_row($format,\@colwidth_wrapped,$_) }
    print $hor_rule_lower."\n";
    # Total:
-   print @{$rows_pary}." result".(@{$rows_pary}>1?"s":"")."\n";
+   print @$rows_pary." result".(@$rows_pary>1?"s":"")."\n";
 }
 
 # vim: set filetype=perl :
@@ -335,7 +328,7 @@ A very permissive one!
 
 =head1 VERSION
 
-0.1.14
+0.1.15
 
 =head1 AUTHOR
 

@@ -10,8 +10,8 @@ a remote SPARQL endpoint from a file. So that you can use your favorite editor
 (vim, emacs, whatever) to edit SPARQL queries, query the remote endpoint and
 have a nicely formatted table.
 
-There are two example files: the file `test.srx` which was obtained from the
-query
+There are some example `srx` files in the folder `examples`: for example, the
+file `test.srx` which was obtained from the query
 
     SELECT ?s ?p ?o
     WHERE {
@@ -40,14 +40,14 @@ on `dbpedia.org` and the file `test.sparql` containing this query:
 
 Play with it:
 
-    $ ./query-sparql test.sparql
+    $ ./query-sparql examples/test.sparql
     ...
     ... outputs the results of the query in xml ...
     ...
 
 The file `test.srx` contains the previous dump, and look:
 
-    $ ./srx2text test.srx
+    $ ./srx2text examples/test.srx
     ┌──────────────────────────────────────────────────────────────────────────┬────┬───────────┐
     │ ?s                                                                       │ ?p │ ?o        │
     ├──────────────────────────────────────────────────────────────────────────┼────┼───────────┤
@@ -63,7 +63,7 @@ The file `test.srx` contains the previous dump, and look:
     │ <http://dbpedia.org/resource/Ángel_Berlanga>                             │ a  │ owl:Thing │
     └──────────────────────────────────────────────────────────────────────────┴────┴───────────┘
     10 results
-    $ ./query-sparql test.sparql | ./srx2text
+    $ ./query-sparql examples/test.sparql | ./srx2text
     ┌──────────────────────────────────────────────────────────────────────────┬────┬───────────┐
     │ ?s                                                                       │ ?p │ ?o        │
     ├──────────────────────────────────────────────────────────────────────────┼────┼───────────┤
@@ -98,15 +98,16 @@ interpreted as an option. This makes it handy to make an executable `.sparql`
 file with a shebang `#!/usr/local/bin/query-sparql`. So that, after installing
 `query-sparql` and `srx2text` in `/usr/local/bin` you can issue:
 
-    $ ./test.sparql | srx2text
+    $ examples/test.sparql | srx2text
 and you'll get your results in a nice table on the terminal.
 
 ##Standard compliance
 
-The reference for `.srx` files is (as of now):
+The reference for `srx` files is (as of now):
 [SPARQL Query Results XML Format (Second Edition), W3C Recommendation 21 March 2013](http://www.w3.org/TR/rdf-sparql-XMLres/).
-I have only very quickly scanned the document so `srx2text` might not be
-100% compliant. But hey, this is only version 0.1 and I can already work with it!
+Our goal is to be 100% compliant with the standard. I have only very quickly
+scanned the document so this goal might not be completely reached as of now
+(but close enough); feel free to complain and/or contribute!
 
 Author:
 - Gniourf Gniourf <gniourfgniourf@gmail.com>.
