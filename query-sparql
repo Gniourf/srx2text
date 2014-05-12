@@ -1,10 +1,14 @@
 #!/bin/bash
 
+# Funny: it's 100% pure Bash, except the curl command (of course).
+
+shopt -s extglob
+
 host_default=http://localhost
 port_default=3020
 path_default=/sparql/
 
-script_version=0.1
+script_version=0.2
 script_name=query-sparql
 
 version() {
@@ -12,7 +16,8 @@ version() {
 }
 
 help() {
-   cat <<EOF
+   local help_ary
+   mapfile help_ary <<EOF
 Run a SPARQL query on a SPARQL endpoint, using curl
 
 Usage:
@@ -63,15 +68,12 @@ difficult).
 Warning: this script is in an instable state; the options, interface, default
 values and script name are subject to change in a near future (or not).
 EOF
+   printf '%s' "${help_ary[@]}"
 }
 
 die() {
-   printf >&2 "%s\n" "$@"
+   (($#)) && printf >&2 "%s\n" "$@"
    exit 1
-}
-
-onExit() {
-   [[ -n $tmp_file ]] && rm "$tmp_file"
 }
 
 get_option_gen() {
@@ -97,7 +99,7 @@ get_option() {
       (--curlopt*) get_option_gen --curlopt copt "$@" ; curloptions+=( "$copt" ) ;;
       (--help|'-?') help ; exit 0 ;;
       (--version|-v) version ; exit 0 ;;
-      (--loud|--no-silent) silent=; shift_arg=1 ;;
+      (--loud|--no-silent) unset silent; shift_arg=1 ;;
       (-*) die "Unrecognized option $1" ;;
       (--) shift ;&
       (*) break_loop=1 ;;
@@ -118,29 +120,22 @@ done
 
 (($#>1)) && die "At most one non-option argument allowed"
 
-file=${1:--}
-if [[ $file = - ]]; then
-   # We'll make a tmp file in this case, as the file needs to be read twice
-   trap onExit EXIT
-   tmp_file=$(mktemp --tmpdir "$script_name-tmp.XXXXXXXXXX") || die "Couldn't create tmp file"
-   cat > "$tmp_file"
-   file=$tmp_file
+# Slurp file in memory
+if [[ -n $1 && $1 != - ]]; then
+   exec < "$1" || die
 fi
+mapfile -t file_ary
 
-if [[ ! -f $file ]]; then
-   die "File \`$file' not found"
-elif [[ ! -r $file ]]; then
-   die "Can't open file \`$file' for reading"
-fi
-
-# Get options from inside file (if any)
+# Get options from file (now in file_ary), if any
 break_loop=0
-while read -r opt arg; do
-   get_option "$opt" "$arg"
+for i in "${file_ary[@]}"; do
+   [[ $i = '###'-+([[:alnum:]])* ]] || continue
+   read -r opt var <<< "${i#"###"}"
+   get_option "$opt" "$var"
    ((break_loop)) && break
-done < <(sed -n 's/^###\(-.\)/\1/p' "$file")
+done
 
 [[ $silent ]] && curloptions=( "$silent" "${curloptions[@]}" )
 
-curl "${curloptions[@]}" --data-urlencode "query@$file" -- "$host:$port$path"
+curl "${curloptions[@]}" --data-urlencode "query@"<(printf '%s\n' "${file_ary[@]}") -- "$host:$port$path"
 
