@@ -51,7 +51,7 @@ GetOptions(
 
 pod2usage(-exit => 0, -verbose => 2, -noperldoc => 1) if $help;
 if($version) {
-   print "srx2text 0.1.6\n";
+   print "srx2text 0.1.7\n";
    exit(0);
 }
 
@@ -97,11 +97,14 @@ my $result_type=$results_node->nodeName;
 my @variables;
 my @rows;
 if($result_type eq "results") {
-   # Get variable nodes inside head
+   # Get variable and link nodes inside head
+   my $inlink;
    for my $v ($head_node->nonBlankChildNodes) {
-      die "In head: not a variable node" unless $v->nodeName eq "variable";
-      die "In head: variable node has no name attribute" unless $v->hasAttribute("name");
-      push(@variables,$v->getAttribute("name"));
+      given($v->nodeName) {
+         when($_ eq "variable") { die "variable node after link node" if $inlink; push(@variables,$v->getAttribute("name")); }
+         when($_ eq "link") { $inlink=1; }
+         default { die "In head: bad node ".$v->nodeName.". Expecting variable or link node"; }
+      }
    }
    # Get result node inside results
    for my $r (@results_children) {
@@ -328,7 +331,7 @@ A very permissive one!
 
 =head1 VERSION
 
-0.1.6
+0.1.7
 
 =head1 AUTHOR
 
