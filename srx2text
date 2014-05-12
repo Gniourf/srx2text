@@ -5,7 +5,6 @@
 use v5.014;
 use utf8;
 use strict;
-use autodie;
 use warnings qw< FATAL utf8 >;
 use open qw< :std :utf8 >;
 use charnames qw< :full >;
@@ -55,20 +54,23 @@ GetOptions(
 
 pod2usage(-exit => 0, -verbose => 2, -noperldoc => 1) if $help;
 if($version) {
-   print "srx2text 0.1.10\n";
+   print "srx2text 0.1.11\n";
    exit(0);
 }
 
 if(@ARGV) {
    my $i;
    map {
-      my $fh;
-      open($fh ,'<', $_) || die "can't open file or standard input for reading: $!";
-      binmode $fh;
-      print "File $_\n";
-      parse_srx($fh);
-      ++$i;
-      print "\n" unless($i==@ARGV);
+      if(open(my $fh ,'<', $_)) {
+         binmode $fh;
+         print "File $_\n";
+         parse_srx($fh);
+         ++$i;
+         print "\n" unless($i==@ARGV);
+      }
+      else {
+         warn "Can't open file `$_' for reading: $!";
+      }
    } @ARGV;
 }
 else {
@@ -341,7 +343,7 @@ A very permissive one!
 
 =head1 VERSION
 
-0.1.10
+0.1.11
 
 =head1 AUTHOR
 
