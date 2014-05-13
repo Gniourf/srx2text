@@ -19,9 +19,7 @@ use Encode;
 
 use URI;
 
-use Data::Dumper;
-
-our $VERSION="0.1.17";
+our $VERSION="0.1.18";
 
 #
 my %prefixes=(
@@ -41,10 +39,9 @@ my %prefixes=(
 #
 
 my @term_size=GetTerminalSize();
-
 my %options=(
-   iri => 1,
-   "fit-to-terminal" => (-t STDOUT ),
+   'iri' => 1,
+   'fit-to-terminal' => (-t STDOUT),
 );
 GetOptions(
    \%options,
@@ -60,7 +57,6 @@ if(@ARGV) {
    my $i;
    for (@ARGV) {
       if(open(my $fh ,'<', $_)) {
-         binmode $fh;
          print "File $_\n" unless @ARGV==1;
          parse_srx($fh);
          ++$i;
@@ -73,7 +69,6 @@ if(@ARGV) {
 }
 else {
    my $fh=\*STDIN;
-   binmode $fh;
    parse_srx($fh);
 }
 
@@ -97,6 +92,7 @@ sub format_uri {
 
 sub parse_srx {
    my $fh=shift;
+   binmode $fh;
    my $doc=XML::LibXML->load_xml(IO=>$fh);
 
    my $sparql_node=$doc->firstChild;
