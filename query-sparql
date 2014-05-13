@@ -6,7 +6,7 @@ host_default=http://localhost
 port_default=3020
 path_default=/sparql/
 
-script_version=0.3
+script_version=0.3.1
 script_name=query-sparql
 
 declare -A options=(
@@ -16,6 +16,8 @@ declare -A options=(
    [path]=$path_default
    [show]=0
 )
+
+curloptions=( -A "query-sparql $script_version" )
 
 version() {
    printf "%s v%s\n" "$script_name" "$script_version"
@@ -111,7 +113,7 @@ get_option() {
       (-p*) get_option_gen -p port "$@" ;;
       (-h*) get_option_gen -h host "$@" ;;
       (--path*) get_option_gen --path path "$@" ;;
-      (--curlopt*) get_option_gen --curlopt copt "$@" ; curloptions+=( "$copt" ) ;;
+      (--curlopt*) get_option_gen --curlopt copt "$@" ; curloptions+=( "${options[copt]}" ) ;;
       (--help|'-?') help ; exit 0 ;;
       (--version|-v) version ; exit 0 ;;
       (--loud|--no-silent) unset options[silent]; shift_arg=1 ;;
@@ -122,7 +124,6 @@ get_option() {
    esac
 }
 
-curloptions=()
 break_loop=0
 while (($#)); do
    get_option "$@"
@@ -131,7 +132,7 @@ while (($#)); do
 done
 set -- "${argslist[@]}" "$@"
 
-(($#>1)) && die "At most one non-option argument allowed"
+(($#>1)) && die "At most one non-option argument allowed. Found:"$'\n'"$(printf '%q\n' "$@")"
 
 # Slurp file in memory
 if [[ -n $1 && $1 != - ]]; then
@@ -154,14 +155,15 @@ done
 
 [[ ${options[silent]} ]] && curloptions=( "${options[silent]}" "${curloptions[@]}" )
 
-# Dirty hack to _really_ show curl command without executing it
+# Dirty hack to _really_ show curl command (and all the proper quotings)
+# without executing it.
 command_not_found_handle() {
    if((${options[show]})); then
       local IFS=' ' command=() idx=0 c
       for c; do printf -v command[++idx] '%q' "$c"; done
       printf "%s\n" "${command[*]}"
    else
-      printf "The command %s could not be located. Please install it, or add its parent directory to your PATH variable\n" "$1"
+      printf >&2 "The command %s could not be located. Please install it, or add its parent directory to your PATH variable\n" "$1"
    fi
 }
 if ((${options[show]})); then
