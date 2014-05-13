@@ -8,7 +8,7 @@ host_default=http://localhost
 port_default=3020
 path_default=/sparql/
 
-script_version=0.2
+script_version=0.2.1
 script_name=query-sparql
 
 version() {
@@ -100,7 +100,7 @@ get_option() {
       (--help|'-?') help ; exit 0 ;;
       (--version|-v) version ; exit 0 ;;
       (--loud|--no-silent) unset silent; shift_arg=1 ;;
-      (-*) die "Unrecognized option $1" ;;
+      (-?) die "Unrecognized option $1" ;;
       (--) shift ;&
       (*) break_loop=1 ;;
    esac
