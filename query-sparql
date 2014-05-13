@@ -8,7 +8,7 @@ host_default=http://localhost
 port_default=3020
 path_default=/sparql/
 
-script_version=0.2.2
+script_version=0.2.3
 script_name=query-sparql
 
 version() {
@@ -36,6 +36,7 @@ OPTIONS:
    --version         Print version and exit
    -v                Same as --version
    --curlopt copt    Pass copt as an option to curl
+   --show            Show query, host, port and path, but don't query endpoint
 
 Default values:
 
@@ -100,6 +101,7 @@ get_option() {
       (--help|'-?') help ; exit 0 ;;
       (--version|-v) version ; exit 0 ;;
       (--loud|--no-silent) unset silent; shift_arg=1 ;;
+      (--show) ((show=1)); shift_arg=1 ;;
       (-?) die "Unrecognized option $1" ;;
       (--) shift ;&
       (*) break_loop=1 ;;
@@ -110,6 +112,7 @@ silent=-sS
 host=$host_default
 port=$port_default
 path=$path_default
+show=0
 curloptions=()
 break_loop=0
 while (($#)); do
@@ -141,5 +144,12 @@ done
 
 [[ $silent ]] && curloptions=( "$silent" "${curloptions[@]}" )
 
-curl "${curloptions[@]}" --data-urlencode "query@"<(printf '%s\n' "${file_ary[@]}") -- "$host:$port$path"
+if ((show)); then
+   fd=<(:)
+   printf '%s\n' "curl \"${curloptions[@]}\" --data-urlencode query@$fd -- \"$host:$port$path\""
+   printf '%s\n' "${file_ary[@]}"
+   printf '%s\n' "(Query has not been sent)"
+else
+   curl "${curloptions[@]}" --data-urlencode "query@"<(printf '%s\n' "${file_ary[@]}") -- "$host:$port$path"
+fi
 
