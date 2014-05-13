@@ -8,7 +8,7 @@ host_default=http://localhost
 port_default=3020
 path_default=/sparql/
 
-script_version=0.2.1
+script_version=0.2.2
 script_name=query-sparql
 
 version() {
@@ -128,11 +128,15 @@ mapfile -t file_ary
 
 # Get options from file (now in file_ary), if any
 break_loop=0
-for i in "${file_ary[@]}"; do
-   [[ $i = '###'-+([[:alnum:]])* ]] || continue
-   read -r opt var <<< "${i#"###"}"
-   get_option "$opt" "$var"
-   ((break_loop)) && break
+((n_file_ary=${#file_ary[@]}))
+for ((i=0;i<n_file_ary;++i)); do
+   l=${file_ary[i]}
+   [[ $l = '#'* || $l = *([[:blank:]]) || $l = '' ]] && unset file_ary[i]
+   [[ $l = '###'-+([-[:alnum:]])* ]] || continue
+   if ((!break_loop)); then
+      read -r opt var <<< "${l#"###"}"
+      get_option "$opt" "$var"
+   fi
 done
 
 [[ $silent ]] && curloptions=( "$silent" "${curloptions[@]}" )
