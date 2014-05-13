@@ -13,13 +13,15 @@ use feature qw< unicode_strings >;
 use XML::LibXML;
 
 use Pod::Usage;
-use Getopt::Long;
+use Getopt::Long qw< :config auto_version >;
 use Term::ReadKey;
 use Encode;
 
 use URI;
 
 use Data::Dumper;
+
+our $VERSION="0.1.17";
 
 #
 my %prefixes=(
@@ -38,25 +40,21 @@ my %prefixes=(
 );
 #
 
-my $is_in_terminal=(-t STDOUT);
-my $help;
-my $version;
-my $fitterminal=$is_in_terminal;
-my $imposed_width;
-my $show_iri=1;
+my @term_size=GetTerminalSize();
+
+my %options=(
+   iri => 1,
+   "fit-to-terminal" => (-t STDOUT ),
+);
 GetOptions(
-   'help|h|?' => \$help,
-   'version|v' => \$version,
-   'fit-to-terminal!' => \$fitterminal,
-   'width|w=i' => \$imposed_width,
-   'iri!' => \$show_iri,
+   \%options,
+   'help|h|?',
+   'fit-to-terminal!',
+   'width|w=i',
+   'iri!',
 ) or pod2usage(1);
 
-pod2usage(-exit => 0, -verbose => 2, -noperldoc => 1) if $help;
-if($version) {
-   print "srx2text 0.1.16\n";
-   exit(0);
-}
+pod2usage(-exit => 0, -verbose => 2, -noperldoc => 1) if $options{"help"};
 
 if(@ARGV) {
    my $i;
@@ -82,7 +80,7 @@ else {
 #
 sub format_uri {
    my $uri=shift;
-   $uri=URI->new($uri)->as_iri if $show_iri;
+   $uri=URI->new($uri)->as_iri if $options{"iri"};
    my $found;
    keys %prefixes; # Explicitly reset the each iterator
    while(my ($prefix,$prefix_uri)=each %prefixes) {
@@ -131,16 +129,16 @@ sub parse_srx {
             my %hrow;
             for my $b ($r->nonBlankChildNodes) {
                die "In result: not a binding node" unless $b->nodeName eq "binding";
-               my $variable=$b->getAttribute("name") || die "In result: binding node doesn't have a name attribute";
+               die "In result: binding node doesn't have a name attribute" unless my $variable=$b->getAttribute("name");
                my $b_children=\@{$b->nonBlankChildNodes};
                die "binding node has ".@$b_children." children! (should only have 1)" unless @$b_children==1;
-               my $uri=$b_children->[0];
+               my $b_firstChild=$b_children->[0];
                my $value;
-               given($uri->nodeName) {
-                  when ("uri") { $value=format_uri($uri->textContent) }
-                  when ("literal") { $value=$uri->textContent }
-                  when ("bnode") { $value="_:".$uri->textContent }
-                  default { die "In binding: expecting uri, literal or bnode node. Found ".$uri->nodeName."\." }
+               given($b_firstChild->nodeName) {
+                  when ("uri") { $value=format_uri($b_firstChild->textContent) }
+                  when ("literal") { $value=$b_firstChild->textContent }
+                  when ("bnode") { $value="_:".$b_firstChild->textContent }
+                  default { die "In binding: expecting uri, literal or bnode node. Found ".$b_firstChild->nodeName."\." }
                }
                $hrow{$variable}=$value;
             }
@@ -157,6 +155,7 @@ sub parse_srx {
       default { die "Not a valid node: $_ at this position" }
    }
 }
+
 
 ################
 # Table format #
@@ -225,13 +224,12 @@ sub print_table {
    
    # Get max width of wanted output:
    my $wanted_max_width=$table_natural_width;
-   my @term_size=GetTerminalSize();
-   $wanted_max_width=$term_size[0] if(@term_size && $term_size[0] && $fitterminal);
+   $wanted_max_width=$term_size[0] if(@term_size && $term_size[0] && $options{"fit-to-terminal"});
    $wanted_max_width=min($table_natural_width,$wanted_max_width);
    
-   if($imposed_width>0) {
-      if($wanted_max_width) { $wanted_max_width=$imposed_width if $imposed_width<$wanted_max_width; }
-      else { $wanted_max_width=$imposed_width; }
+   if($options{"width"}>0) {
+      if($wanted_max_width) { $wanted_max_width=$options{"width"} if $options{"width"}<$wanted_max_width; }
+      else { $wanted_max_width=$options{"width"}; }
    }
    
    my @colwidth_wrapped=@colwidth;
@@ -326,10 +324,6 @@ Impose width to be W
 =head1 LICENSE
 
 A very permissive one!
-
-=head1 VERSION
-
-0.1.16
 
 =head1 AUTHOR
 
