@@ -1,15 +1,21 @@
 #!/bin/bash
 
-# Funny: it's 100% pure Bash, except the curl command (of course).
-
 shopt -s extglob
 
 host_default=http://localhost
 port_default=3020
 path_default=/sparql/
 
-script_version=0.2.3
+script_version=0.3
 script_name=query-sparql
+
+declare -A options=(
+   [silent]=-sS
+   [host]=$host_default
+   [port]=$port_default
+   [path]=$path_default
+   [show]=0
+)
 
 version() {
    printf "%s v%s\n" "$script_name" "$script_version"
@@ -37,6 +43,11 @@ OPTIONS:
    -v                Same as --version
    --curlopt copt    Pass copt as an option to curl
    --show            Show query, host, port and path, but don't query endpoint
+                     (default off)
+   --dry-run         Same as --show
+
+Note: the options may appear after the argument(s). At most one argument
+allowed.
 
 Default values:
 
@@ -51,7 +62,8 @@ LICENSE: A very permissive one!
 
 INLINED OPTIONS: a cool feature of $script_name is that the options can also be
 passed from inside the query file as follows: the file is grep'd over the regex
-'^###-.' and the corresponding line is used as arguments. E.g., your file can contain
+'^###-.' and the corresponding line is used as arguments. E.g., your file can
+contain
 
 ###-h dbpedia.org
 ###-p 80
@@ -66,8 +78,8 @@ The advantage of this is to be able to use the query file with a shebang
 #!/usr/local/bin/$script_name (and it didn't make the code much more
 difficult).
 
-Warning: this script is in an instable state; the options, interface, default
-values and script name are subject to change in a near future (or not).
+Funny note: this script is 100% pure Bash (except for the curl command, of
+course).
 EOF
    printf '%s' "${help_ary[@]}"
 }
@@ -81,18 +93,20 @@ get_option_gen() {
    local id=$1 var=$2
    shift 2
    if [[ $1 = $id ]]; then
-      declare -g "$var=$2"
+      declare -g options["$var"]="$2"
       shift_arg=2
    elif [[ $1 = $id=* ]]; then
-      declare -g "$var=${1#"$id"=}"
+      declare -g options["$var"]=${1#"$id="}
       shift_arg=1
    else
-      declare -g "$var=${1#"$id"}"
+      declare -g options["$var"]="${1#"$id"}"
       shift_arg=1
    fi
 }
 
+argslist=()
 get_option() {
+   shift_arg=0
    case $1 in
       (-p*) get_option_gen -p port "$@" ;;
       (-h*) get_option_gen -h host "$@" ;;
@@ -100,19 +114,14 @@ get_option() {
       (--curlopt*) get_option_gen --curlopt copt "$@" ; curloptions+=( "$copt" ) ;;
       (--help|'-?') help ; exit 0 ;;
       (--version|-v) version ; exit 0 ;;
-      (--loud|--no-silent) unset silent; shift_arg=1 ;;
-      (--show) ((show=1)); shift_arg=1 ;;
+      (--loud|--no-silent) unset options[silent]; shift_arg=1 ;;
+      (--show|--dry-run) options[show]=1; shift_arg=1 ;;
       (-?) die "Unrecognized option $1" ;;
-      (--) shift ;&
-      (*) break_loop=1 ;;
+      (--) shift_arg=1; break_loop=1 ;;
+      (*) shift_arg=1; argslist+=( "$1" ) ;;
    esac
 }
 
-silent=-sS
-host=$host_default
-port=$port_default
-path=$path_default
-show=0
 curloptions=()
 break_loop=0
 while (($#)); do
@@ -120,6 +129,7 @@ while (($#)); do
    ((break_loop)) && break
    shift "$shift_arg"
 done
+set -- "${argslist[@]}" "$@"
 
 (($#>1)) && die "At most one non-option argument allowed"
 
@@ -142,14 +152,27 @@ for ((i=0;i<n_file_ary;++i)); do
    fi
 done
 
-[[ $silent ]] && curloptions=( "$silent" "${curloptions[@]}" )
+[[ ${options[silent]} ]] && curloptions=( "${options[silent]}" "${curloptions[@]}" )
 
-if ((show)); then
-   fd=<(:)
-   printf '%s\n' "curl \"${curloptions[@]}\" --data-urlencode query@$fd -- \"$host:$port$path\""
+# Dirty hack to _really_ show curl command without executing it
+command_not_found_handle() {
+   if((${options[show]})); then
+      local IFS=' ' command=() idx=0 c
+      for c; do printf -v command[++idx] '%q' "$c"; done
+      printf "%s\n" "${command[*]}"
+   else
+      printf "The command %s could not be located. Please install it, or add its parent directory to your PATH variable\n" "$1"
+   fi
+}
+if ((${options[show]})); then
+   hash -r
+   PATH=/dev/fd
+fi
+
+curl "${curloptions[@]}" --data-urlencode "query@"<(printf '%s\n' "${file_ary[@]}") -- "${options[host]}:${options[port]}${options[path]}"
+
+if ((${options[show]})); then
    printf '%s\n' "${file_ary[@]}"
-   printf '%s\n' "(Query has not been sent)"
-else
-   curl "${curloptions[@]}" --data-urlencode "query@"<(printf '%s\n' "${file_ary[@]}") -- "$host:$port$path"
+   printf '%s\n' "(No queries have been sent)"
 fi
 
