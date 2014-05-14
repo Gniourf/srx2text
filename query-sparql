@@ -6,7 +6,7 @@ host_default=http://localhost
 port_default=3020
 path_default=/sparql/
 
-script_version=0.3.1
+script_version=0.3.2
 script_name=query-sparql
 
 declare -A options=(
@@ -17,15 +17,19 @@ declare -A options=(
    [show]=0
 )
 
-curloptions=( -A "query-sparql $script_version" )
-
 version() {
-   printf "%s v%s\n" "$script_name" "$script_version"
+   local a=()
+   [[ $1 ]] && a=( -v "$1" )
+   printf "${a[@]}" "%s v%s\n" "$script_name" "$script_version"
 }
+
+version script_full_name
+
+curloptions=( -A "$script_full_name" )
 
 help() {
    local help_ary
-   mapfile help_ary <<EOF
+   IFS= read -d '' help_string <<EOF
 Run a SPARQL query on a SPARQL endpoint, using curl
 
 Usage:
@@ -83,7 +87,7 @@ difficult).
 Funny note: this script is 100% pure Bash (except for the curl command, of
 course).
 EOF
-   printf '%s' "${help_ary[@]}"
+   printf '%s' "$help_string"
 }
 
 die() {
@@ -135,22 +139,18 @@ set -- "${argslist[@]}" "$@"
 (($#>1)) && die "At most one non-option argument allowed. Found:"$'\n'"$(printf '%q\n' "$@")"
 
 # Slurp file in memory
+get_infile_option() {
+   [[ $2 = '#'* || $2 = *([[:blank:]]) || -z $2 ]] && delete_line_ary+=( "$1" )
+   ((!break_loop )) && [[ $2 =~ ^"###"(-[^[:blank:]]+)[[:blank:]]+(.*)$ ]] && get_option "${BASH_REMATCH[@]:1}"
+}
 if [[ -n $1 && $1 != - ]]; then
    exec < "$1" || die
 fi
-mapfile -t file_ary
-
-# Get options from file (now in file_ary), if any
 break_loop=0
-((n_file_ary=${#file_ary[@]}))
-for ((i=0;i<n_file_ary;++i)); do
-   l=${file_ary[i]}
-   [[ $l = '#'* || $l = *([[:blank:]]) || $l = '' ]] && unset file_ary[i]
-   [[ $l = '###'-+([-[:alnum:]])* ]] || continue
-   if ((!break_loop)); then
-      read -r opt var <<< "${l#"###"}"
-      get_option "$opt" "$var"
-   fi
+delete_line_ary=()
+mapfile -t -c 1 -C get_infile_option file_ary
+for i in "${delete_line_ary[@]}"; do
+   unset file_ary[i]
 done
 
 [[ ${options[silent]} ]] && curloptions=( "${options[silent]}" "${curloptions[@]}" )
