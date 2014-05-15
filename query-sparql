@@ -7,7 +7,7 @@ port_default=3020
 path_default=/sparql/
 method_default=url-post
 
-script_version=0.4.1
+script_version=0.5
 script_name=query-sparql
 script_fullname="$script_name v$script_version"
 
@@ -23,6 +23,7 @@ declare -A options=(
 version() { printf "%s\n" "$script_fullname"; }
 
 curloptions=( -A "$script_fullname" )
+pipes=()
 default_graph_uri=()
 named_graph_uri=()
 using_graph_uri=()
@@ -115,7 +116,21 @@ $script_name -h dbpedia.org -p 80 --curlopt -i file_no_inline
 where file_no_inline is like file. The advantage of this is to be able to use
 the query file with a shebang #!/usr/local/bin/$script_name (and it didn't make
 the code much more difficult). Also, the empty lines and the lines starting
-with "#" will be completely removed from the query.
+with "#" will be completely removed from the query. As a by-product, you can
+specify a line like:
+
+###-- filename
+
+and the file with file name filename will be included in place of this line.
+
+The option line (i.e., a line matching ^###-[^[:blank:]]) passed through eval
+(this is dangerous) to be slip into parts. This enables lines like:
+
+###-h dbpedia.org -p 80 --curlopt -i prefixes.sparql
+
+to specify several options on one line and a file to be included (here the file
+prefixes.sparql).
+
 
 Note about the query/update types: the query/update types are discussed in the
 SPARQL 1.1 Protocol, w3c Recommendation, 21 March 2013 document:
@@ -152,29 +167,46 @@ die() {
    exit 1
 }
 
+join() {
+   # $1 is return variable name
+   # $2 is sep
+   # $3... are the elements to join
+   local retname=$1 sep=$2 ret=$3
+   shift 3 || shift $(($#))
+   printf -v "$retname" "%s" "$ret${@/#/$sep}"
+}
+
+encode_query_component() {
+   local str=${!1}
+   str=${str//:/%3A}
+   str=${str//'/'/%2F}
+   printf -v "$1" '%s' "$str"
+}
+
 get_option_gen() {
    local id=$1 var=$2
    shift 2
    if [[ $1 = $id ]]; then
-      declare -g options["$var"]="$2"
+      set -- "$2"
       shift_arg=2
    elif [[ $1 = $id=* ]]; then
-      declare -g options["$var"]=${1#"$id="}
+      set -- "${1#"$id="}"
       shift_arg=1
    else
-      declare -g options["$var"]="${1#"$id"}"
+      set "${1#"$id"}"
       shift_arg=1
    fi
+   [[ $1 ]] || die "Empty argument for option $id"
+   declare -g options["$var"]=$1
 }
 
-argslist=()
 get_option() {
    shift_arg=0
    case $1 in
       (-p*) get_option_gen -p port "$@" ;;
       (-h*) get_option_gen -h host "$@" ;;
       (--path*) get_option_gen --path path "$@" ;;
-      (--pipe*) get_option_gen --pipe pipe "$@" ;;
+      (--pipe*) get_option_gen --pipe pipe "$@"; pipes+=( "${options[pipe]}" ) ;;
       (--curlopt*) get_option_gen --curlopt copt "$@" ; curloptions+=( "${options[copt]}" ) ;;
       (--help|'-?') help ; exit 0 ;;
       (--version|-v) version ; exit 0 ;;
@@ -195,64 +227,58 @@ get_option() {
    esac
 }
 
-break_loop=0
-while (($#)); do
-   get_option "$@"
-   ((break_loop)) && break
-   shift "$shift_arg"
-done
-set -- "${argslist[@]}" "$@"
+treat_line() {
+   eval "set -- $1"
+   infile_options=( "$@" )
+}
 
-(($#>1)) && die "At most one non-option argument allowed. Found:"$'\n'"$(printf '%q\n' "$@")"
+get_options() {
+   while (($#)); do
+      get_option "$@"
+      shift "$shift_arg"
+      ((break_loop)) && break
+   done
+   argslist=( "${argslist[@]}" "$@" )
+}
+break_loop=0
+argslist=()
+get_options "$@"
+set -- "${argslist[@]}"
 
 # Slurp file in memory
-get_infile_option() {
-   [[ $2 = '#'* || $2 = *([[:blank:]]) || -z $2 ]] && delete_line_ary+=( "$1" )
-   ((!break_loop )) && [[ $2 =~ ^"###"(-[^[:blank:]]+)[[:blank:]]+(.*)$ ]] && get_option "${BASH_REMATCH[@]:1}"
-}
-if [[ -n $1 && $1 != - ]]; then
-   exec < "$1" || die
-fi
-break_loop=0
-delete_line_ary=()
-mapfile -t -c 1 -C get_infile_option file_ary
-for i in "${delete_line_ary[@]}"; do
-   unset file_ary[i]
-done
-
-[[ ${options[silent]} ]] && curloptions=( "${options[silent]}" "${curloptions[@]}" )
-
-# Dirty hack to _really_ show curl command (and all the proper quotings)
-# without executing it, or complain if no curl command is found
-command_not_found_handle() {
-   if((${options[show]})); then
-      local IFS=' ' command=() idx=0 c
-      for c; do printf -v command[++idx] '%q' "$c"; done
-      printf "%s\n" "${command[*]}"
-   else
-      printf >&2 "The command %s could not be located. Please install it, or add its parent directory to your PATH variable\n" "$1"
-   fi
-}
-if ((${options[show]})); then
-   hash -r
-   PATH=/dev/fd
-fi
-
-join() {
-   # $1 is return variable name
-   # $2 is sep
-   # $3... are the elements to join
-   local retname=$1 sep=$2 ret=$3
-   shift 3 || shift $(($#))
-   printf -v "$retname" "%s" "$ret${@/#/$sep}"
+slurp_file() {
+   local my_file_ary=() delete_line_ary=()
+   local file=$1
+   local line
+   local argslist=()
+   local infile_options=()
+   local break_loop
+   [[ -z $1 || $1 = - ]] && file=/dev/fd/0
+   while IFS= read -r line; do
+      [[ -z $line || $line = *([[:blank:]]) ]] && continue
+      if [[ $line = '###-'?([^[:blank:]])* ]]; then
+         argslist=()
+         treat_line "${line#'###'}"
+         break_loop=0
+         get_options "${infile_options[@]}"
+         slurp_args "${argslist[@]}"
+      elif [[ $line = '#'* ]]; then
+         continue
+      else
+         file_ary+=( "$line" )
+      fi
+   done < "$file" || die
 }
 
-encode_query_component() {
-   local str=${!1}
-   str=${str//:/%3A}
-   str=${str//'/'/%2F}
-   printf -v "$1" '%s' "$str"
+file_ary=()
+slurp_args() {
+   while (($#)); do
+      slurp_file "$1"
+      shift
+   done
 }
+(($#)) || set -- -
+slurp_args "$@"
 
 # Building the arguments for the curl command
 unset url_query
@@ -302,14 +328,40 @@ case ${options[method]} in
       ;;
 esac
 
+curl_command() {
+   curl "${curloptions[@]}"<(printf '%s\n' "${file_ary[@]}") -- "${options[host]}:${options[port]}${options[path]}$url_query"
+}
 
-if [[ ${options[pipe]} ]] && ((!${options[show]})); then
-   pipe=${options[pipe]}
-else
-   pipe=cat
+pipe() {
+   # $1 is command to execute
+   # $2... are the pipes
+   if (($#>1)) && ((!${options[show]})); then
+      pipe "${@:1:$#-1}" | "${@:0-1}"
+   else
+      "$1"
+   fi
+}
+
+# Dirty hack to _really_ show curl command (and all the proper quotings)
+# without executing it, or complain if no curl command is found
+command_not_found_handle() {
+   if ((${options[show]})); then
+      local IFS=' ' command=() idx=0 c
+      for c; do printf -v command[++idx] '%q' "$c"; done
+      printf "%s\n" "${command[*]}"
+   else
+      printf >&2 "The command %s could not be located. Please install it, or add its parent directory to your PATH variable\n" "$1"
+   fi
+}
+
+[[ ${options[silent]} ]] && curloptions=( "${options[silent]}" "${curloptions[@]}" )
+
+if ((${options[show]})); then
+   hash -r
+   PATH=/dev/fd
 fi
 
-curl "${curloptions[@]}"<(printf '%s\n' "${file_ary[@]}") -- "${options[host]}:${options[port]}${options[path]}$url_query" | "$pipe"
+pipe curl_command "${pipes[@]}"
 
 if ((${options[show]})); then
    printf '%s\n' "${file_ary[@]}"
