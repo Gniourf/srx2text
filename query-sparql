@@ -7,7 +7,7 @@ port_default=3020
 path_default=/sparql/
 method_default=url-post
 
-script_version=0.4
+script_version=0.4.1
 script_name=query-sparql
 script_fullname="$script_name v$script_version"
 
@@ -51,6 +51,7 @@ OPTIONS:
    --curlopt copt    Pass copt as an option to curl
    --show            Show query, host, port and path, but don't query endpoint
    --dry-run         Same as --show
+   --pipe P          Pipe output through program P
 
 OPTIONS for query/update:
 
@@ -173,6 +174,7 @@ get_option() {
       (-p*) get_option_gen -p port "$@" ;;
       (-h*) get_option_gen -h host "$@" ;;
       (--path*) get_option_gen --path path "$@" ;;
+      (--pipe*) get_option_gen --pipe pipe "$@" ;;
       (--curlopt*) get_option_gen --curlopt copt "$@" ; curloptions+=( "${options[copt]}" ) ;;
       (--help|'-?') help ; exit 0 ;;
       (--version|-v) version ; exit 0 ;;
@@ -300,7 +302,14 @@ case ${options[method]} in
       ;;
 esac
 
-curl "${curloptions[@]}"<(printf '%s\n' "${file_ary[@]}") -- "${options[host]}:${options[port]}${options[path]}$url_query"
+
+if [[ ${options[pipe]} ]] && ((!${options[show]})); then
+   pipe=${options[pipe]}
+else
+   pipe=cat
+fi
+
+curl "${curloptions[@]}"<(printf '%s\n' "${file_ary[@]}") -- "${options[host]}:${options[port]}${options[path]}$url_query" | "$pipe"
 
 if ((${options[show]})); then
    printf '%s\n' "${file_ary[@]}"
