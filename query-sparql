@@ -5,9 +5,11 @@ shopt -s extglob
 host_default=http://localhost
 port_default=3020
 path_default=/sparql/
+method_default=url-post
 
-script_version=0.3.2
+script_version=0.4
 script_name=query-sparql
+script_fullname="$script_name v$script_version"
 
 declare -A options=(
    [silent]=-sS
@@ -15,17 +17,16 @@ declare -A options=(
    [port]=$port_default
    [path]=$path_default
    [show]=0
+   [method]=$method_default
 )
 
-version() {
-   local a=()
-   [[ $1 ]] && a=( -v "$1" )
-   printf "${a[@]}" "%s v%s\n" "$script_name" "$script_version"
-}
+version() { printf "%s\n" "$script_fullname"; }
 
-version script_full_name
-
-curloptions=( -A "$script_full_name" )
+curloptions=( -A "$script_fullname" )
+default_graph_uri=()
+named_graph_uri=()
+using_graph_uri=()
+using_named_graph_uri=()
 
 help() {
    local help_ary
@@ -49,10 +50,40 @@ OPTIONS:
    -v                Same as --version
    --curlopt copt    Pass copt as an option to curl
    --show            Show query, host, port and path, but don't query endpoint
-                     (default off)
    --dry-run         Same as --show
 
-Note: the options may appear after the argument(s). At most one argument
+OPTIONS for query/update:
+
+* query via GET (see notes below):
+   --get                      Use a GET method
+   --default-graph-uri G      Use default graph G
+   --named-graph-uri G        Use named graph G
+
+* query via URL-encoded POST
+   --url-post                 Use the URL-encoded POST method (default)
+   --default-graph-uri G      Use default graph G
+   --named-graph-uri G        Use named graph G
+
+* query via direct POST
+   --post                     Use the direct POST method
+   --default-graph-uri G      Use default graph G
+   --named-graph-uri G        Use named graph G
+
+* update via URL-encoded POST
+   --update-url-post          Use the URL-encoded POST method
+   --update                   Same as --update-url-post
+   --using-graph-uri G        Use default graph G
+   --using-named-graph-uri G  Use named graph G
+
+* update via direct POST
+   --update-post              Use the URL-encoded POST method
+   --using-graph-uri G        Use default graph G
+   --using-named-graph-uri G  Use named graph G
+
+You can use several --default-graph-uri, --named-graph-uri, --using-graph-uri
+or --using-named-graph-uri options, as specifies by the recommendation.
+
+Note: the options may appear after the argument(s), but at most one argument is
 allowed.
 
 Default values:
@@ -60,6 +91,7 @@ Default values:
 host: $host_default
 port: $port_default
 path: $path_default
+method: $method_default
 
 DATE:    2014-05-11
 VERSION: $script_version
@@ -79,10 +111,34 @@ and then it's like running:
 
 $script_name -h dbpedia.org -p 80 --curlopt -i file_no_inline
 
-where file_no_inline is like file (the corresponding lines are not removed).
-The advantage of this is to be able to use the query file with a shebang
-#!/usr/local/bin/$script_name (and it didn't make the code much more
-difficult).
+where file_no_inline is like file. The advantage of this is to be able to use
+the query file with a shebang #!/usr/local/bin/$script_name (and it didn't make
+the code much more difficult). Also, the empty lines and the lines starting
+with "#" will be completely removed from the query.
+
+Note about the query/update types: the query/update types are discussed in the
+SPARQL 1.1 Protocol, w3c Recommendation, 21 March 2013 document:
+
+http://www.w3.org/TR/sparql11-protocol/
+
+There are 3 types of queries:
+* Query via GET, using a GET method (this is triggered by the --get option).
+* Query via URL-encoded POST method (this is triggered by the --url-post
+option). This is the default if no methods are specified.
+* Query via direct POST method (this is triggered by the --post option).
+
+There are 2 types of updates:
+* Update via URL-encoded POST method (this is triggered by the
+--update-url-post option).
+* Update via direct-encoded POST method (this is triggered by the
+--update-post option).
+
+This script is meant to be 100% compliant. Feel free to contribute and/or
+complain about this.
+
+Note: when using the --post and --update-post methods, the --default-graph-uri,
+--named-graph-uri, --using-graph-uri and --using-named-graph-uri options will
+only percent-encode the characters ":" and "/". This might change in the future.
 
 Funny note: this script is 100% pure Bash (except for the curl command, of
 course).
@@ -122,8 +178,17 @@ get_option() {
       (--version|-v) version ; exit 0 ;;
       (--loud|--no-silent) unset options[silent]; shift_arg=1 ;;
       (--show|--dry-run) options[show]=1; shift_arg=1 ;;
-      (-?) die "Unrecognized option $1" ;;
+      (--get) options[method]=get; shift_arg=1 ;;
+      (--post) options[method]=post; shift_arg=1 ;;
+      (--url-post) options[method]=url-post; shift_arg=1 ;;
+      (--update-post) options[method]=update-post; shift_arg=1 ;;
+      (--update-url-post|--update) options[method]=update-url-post; shift_arg=1 ;;
+      (--default-graph-uri*) get_option_gen --default-graph-uri default-graph-uri "$@"; default_graph_uri+=( "${options[default-graph-uri]}" ) ;;
+      (--named-graph-uri*) get_option_gen --named-graph-uri named-graph-uri "$@"; named_graph_uri+=( "${options[named-graph-uri]}" ) ;;
+      (--using-graph-uri*) get_option_gen --using-graph-uri using-graph-uri "$@"; using_graph_uri+=( "${options[using-graph-uri]}" ) ;;
+      (--using-named-graph-uri*) get_option_gen --using-named-graph-uri using-named-graph-uri "$@"; using_named_graph_uri+=( "${options[using-named-graph-uri]}" ) ;;
       (--) shift_arg=1; break_loop=1 ;;
+      (-?*) die "Unrecognized option $1" ;;
       (*) shift_arg=1; argslist+=( "$1" ) ;;
    esac
 }
@@ -156,7 +221,7 @@ done
 [[ ${options[silent]} ]] && curloptions=( "${options[silent]}" "${curloptions[@]}" )
 
 # Dirty hack to _really_ show curl command (and all the proper quotings)
-# without executing it.
+# without executing it, or complain if no curl command is found
 command_not_found_handle() {
    if((${options[show]})); then
       local IFS=' ' command=() idx=0 c
@@ -171,7 +236,71 @@ if ((${options[show]})); then
    PATH=/dev/fd
 fi
 
-curl "${curloptions[@]}" --data-urlencode "query@"<(printf '%s\n' "${file_ary[@]}") -- "${options[host]}:${options[port]}${options[path]}"
+join() {
+   # $1 is return variable name
+   # $2 is sep
+   # $3... are the elements to join
+   local retname=$1 sep=$2 ret=$3
+   shift 3 || shift $(($#))
+   printf -v "$retname" "%s" "$ret${@/#/$sep}"
+}
+
+encode_query_component() {
+   local str=${!1}
+   str=${str//:/%3A}
+   str=${str//'/'/%2F}
+   printf -v "$1" '%s' "$str"
+}
+
+# Building the arguments for the curl command
+unset url_query
+case ${options[method]} in
+   (get)
+      for i in "${default_graph_uri[@]}"; do curloptions+=( --data-urlencode "default-graph-uri=$i" ); done
+      for i in "${named_graph_uri[@]}"; do curloptions+=( --data-urlencode "named-graph-uri=$i" ); done
+      curloptions+=( -G --data-urlencode "query@" )
+      ;;
+   (url-post)
+      for i in "${default_graph_uri[@]}"; do curloptions+=( --data-urlencode "default-graph-uri=$i" ); done
+      for i in "${named_graph_uri[@]}"; do curloptions+=( --data-urlencode "named-graph-uri=$i" ); done
+      curloptions+=( --data-urlencode "query@" )
+      ;;
+   (post)
+      url_query_ary=()
+      for i in "${default_graph_uri[@]}"; do
+         encode_query_component i
+         url_query_ary+=( "default-graph-uri=$i" )
+      done
+      for i in "${named_graph_uri[@]}"; do
+         encode_query_component i
+         url_query_ary+=( "named-graph-uri=$i" )
+      done
+      join url_query '&' "${url_query_ary[@]}"
+      url_query=?$url_query
+      curloptions+=( -H "Content-Type: application/sparql-query" --data-binary "@" )
+      ;;
+   (update-url-post)
+      for i in "${using_graph_uri[@]}"; do curloptions+=( --data-urlencode "using-graph-uri=$i" ); done
+      for i in "${using_named_graph_uri[@]}"; do curloptions+=( --data-urlencode "using-named-graph-uri=$i" ); done
+      curloptions+=( --data-urlencode "update@" )
+      ;;
+   (update-post) 
+      url_query_ary=()
+      for i in "${default_graph_uri[@]}"; do
+         encode_query_component i
+         url_query_ary+=( "default-graph-uri=$i" )
+      done
+      for i in "${named_graph_uri[@]}"; do
+         encode_query_component i
+         url_query_ary+=( "named-graph-uri=$i" )
+      done
+      join url_query '&' "${url_query_ary[@]}"
+      url_query=?$url_query
+      curloptions+=( -H "Content-Type: application/sparql-update" --data-binary "@" )
+      ;;
+esac
+
+curl "${curloptions[@]}"<(printf '%s\n' "${file_ary[@]}") -- "${options[host]}:${options[port]}${options[path]}$url_query"
 
 if ((${options[show]})); then
    printf '%s\n' "${file_ary[@]}"

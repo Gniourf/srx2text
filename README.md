@@ -27,12 +27,11 @@ on `dbpedia.org` and the file `test.sparql` containing this query:
     ### These options are passed as options to query-sparql!
     ###-h dbpedia.org
     ###-p 80
+    ###--default-graph-uri=http://dbpedia.org
     
     SELECT ?s ?p ?o
     WHERE {
-       GRAPH <http://dbpedia.org> {
-          ?s ?p ?o
-       }
+       ?s ?p ?o
     }
     LIMIT 10
     
